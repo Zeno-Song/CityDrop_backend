@@ -1,4 +1,4 @@
-package com.citydrop.backend.entities;
+package com.citydrop.backend.db.entities;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Table;

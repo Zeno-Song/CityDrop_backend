@@ -1,12 +1,11 @@
-package com.citydrop.backend.entities;
+package com.citydrop.backend.db.entities;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Table;
 
-@Table("users")
-public record UserEntity(
+@Table("authorities")
+public record AuthorityEntity(
         @Id int id,
         String username,
-        String password,
-        int enabled
+        String authority
 ) {}
