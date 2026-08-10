@@ -1,4 +1,9 @@
 package com.citydrop.backend.db;
 
-public interface UserRepository {
+import com.citydrop.backend.db.entities.UserEntity;
+import org.springframework.data.repository.ListCrudRepository;
+
+public interface UserRepository extends ListCrudRepository<UserEntity, Integer> {
+
+    UserEntity findByUsername(String username);
 }
