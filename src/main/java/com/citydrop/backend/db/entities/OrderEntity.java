@@ -10,6 +10,7 @@ public record OrderEntity(
         String destination,
         double packageWeightLbs,
         double price,
+        double time,
         String vehicle,
         int stationId,
         String status,
