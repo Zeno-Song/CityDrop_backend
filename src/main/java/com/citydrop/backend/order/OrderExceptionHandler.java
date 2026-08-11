@@ -18,4 +18,13 @@ public class OrderExceptionHandler {
                 .status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", exception.getMessage()));
     }
+
+    @ExceptionHandler(NotEnoughVehiclesException.class)
+    public ResponseEntity<Map<String, String>> handleNotEnoughVehicles(
+            NotEnoughVehiclesException exception
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of("error", exception.getMessage()));
+    }
 }
