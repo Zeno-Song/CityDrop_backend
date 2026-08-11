@@ -1,4 +1,8 @@
 package com.citydrop.backend.db;
 
-public interface StationRepository {
+import com.citydrop.backend.db.entities.StationEntity;
+import com.citydrop.backend.db.entities.UserEntity;
+import org.springframework.data.repository.ListCrudRepository;
+
+public interface StationRepository extends ListCrudRepository<StationEntity, Integer> {
 }

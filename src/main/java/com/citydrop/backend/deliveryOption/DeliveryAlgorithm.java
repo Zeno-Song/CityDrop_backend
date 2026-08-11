@@ -1,13 +1,12 @@
-package com.citydrop.backend.service;
+package com.citydrop.backend.deliveryOption;
 
-import com.citydrop.backend.entity.StationEntity;
-import com.citydrop.backend.model.VehicleType;
+import com.citydrop.backend.db.entities.StationEntity;
+import com.citydrop.backend.enums.VehicleType;
 import org.springframework.stereotype.Component;
 
 /**
  * Calculates delivery time and cost for one (station, destination, vehicle) combination.
- *
- * Assumptions (agreed for the base project):
+ * Assumptions:
  * - Straight-line distance is used for both vehicles; the robot's lower speed
  *   accounts for it being bound to roads.
  * - coordX = latitude, coordY = longitude, in degrees (matches StationEntity).
@@ -32,7 +31,7 @@ public class DeliveryAlgorithm {
      */
     public double computeTime(StationEntity station, double destCoordX, double destCoordY, String vehicle) {
         double distanceMiles = computeDistanceMiles(
-                station.getCoordX(), station.getCoordY(), destCoordX, destCoordY);
+                station.coordX(), station.coordY(), destCoordX, destCoordY);
         double speedMph = switch (VehicleType.valueOf(vehicle)) {
             case ROBOT -> ROBOT_SPEED_MPH;
             case DRONE -> DRONE_SPEED_MPH;
@@ -41,7 +40,7 @@ public class DeliveryAlgorithm {
     }
 
     /**
-     * Delivery cost in USD: base price + per-pound rate, rounded to 2 decimals.
+     * Compute the cost based on package weight and the vehicle type, in USD.
      */
     public double computeCost(double packageWeightLbs, String vehicle) {
         double cost = switch (VehicleType.valueOf(vehicle)) {
@@ -52,8 +51,7 @@ public class DeliveryAlgorithm {
     }
 
     /**
-     * Straight-line (haversine) distance between two coordinates, in miles.
-     * coordX is latitude, coordY is longitude, both in degrees.
+     * This is an algorithm used to compute the distance between two points on a sphere (the path is a curve)
      */
     public double computeDistanceMiles(double coordX1, double coordY1, double coordX2, double coordY2) {
         double lat1 = Math.toRadians(coordX1);
