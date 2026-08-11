@@ -1,6 +1,6 @@
 # Contributing to CityDrop_backend
 
-This repo uses a fork-based workflow: you never push directly to this repo. You fork it, work in your fork, and open a pull request back here. Every PR requires approval from a code owner (`@Zeno-Song` or the team lead) before it can be merged.
+This repo uses a fork-based workflow: you never push directly to this repo. You fork it, work in your fork, and open a pull request back here. Every PR requires approval from a code owner (`@Zeno-Song` or `@wangjiaxing1233`) before it can be merged.
 
 ## One-time setup
 
