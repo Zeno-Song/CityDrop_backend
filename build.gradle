@@ -18,6 +18,9 @@ repositories {
 }
 
 dependencies {
+	//Spring Security
+
+
 	implementation 'org.springframework.boot:spring-boot-starter-data-jdbc'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
@@ -31,3 +34,4 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
