@@ -1,3 +1,10 @@
 spring:
   application:
     name: backend
+  datasource:
+    url: jdbc:postgresql://localhost:5432/citydrop
+    username: postgres
+    password: secret
+  sql:
+    init:
+      mode: always
