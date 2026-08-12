@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS orders (
                         destination        VARCHAR(500) NOT NULL,
                         package_weight_lbs DOUBLE PRECISION NOT NULL CHECK (package_weight_lbs > 0),
                         price              DOUBLE PRECISION NOT NULL CHECK (price >= 0),
+                        time DOUBLE PRECISION NOT NULL CHECK (time >= 0),
                         vehicle            VARCHAR(20) NOT NULL CHECK (vehicle IN ('ROBOT', 'DRONE')),
                         station_id         INTEGER NOT NULL REFERENCES stations (station_id),
                         status             VARCHAR(30) NOT NULL DEFAULT 'PENDING_DROPOFF'
