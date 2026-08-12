@@ -51,7 +51,7 @@ public class OrderService {
                         quote.vehicle().equalsIgnoreCase(order.vehicle())
                 )
                 .findFirst()
-                .orElseThrow(NotEnoughVehiclesException::new);
+                .orElseThrow(VehicleUnavailableException::new);
 
         int updatedVehicleCount = switch (
                 VehicleType.valueOf(selectedQuote.vehicle())
@@ -67,7 +67,7 @@ public class OrderService {
         };
 
         if (updatedVehicleCount == 0) {
-            throw new NotEnoughVehiclesException();
+            throw new VehicleUnavailableException();
         }
 
         OrderEntity savedOrder = orderRepository.save(
