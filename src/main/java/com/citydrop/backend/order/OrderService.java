@@ -10,6 +10,14 @@ import com.citydrop.backend.models.responses.OrderListResponse;
 import com.citydrop.backend.models.responses.OrderObject;
 import org.springframework.stereotype.Service;
 
+import com.citydrop.backend.enums.VehicleType;
+import com.citydrop.backend.models.requests.SubmissionObject;
+import com.citydrop.backend.models.responses.DeliveryQuote;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+
 import java.util.List;
 
 @Service
@@ -28,7 +36,57 @@ public class OrderService {
         this.stationRepository = stationRepository;
         this.deliveryService = deliveryService;
     }
+    @Transactional
+    public OrderObject submitOrder(int userId, SubmissionObject order) {
+        DeliveryQuote selectedQuote = deliveryService
+                .getDeliveryOptions(
+                        order.destination(),
+                        order.packageWeightLbs()
+                )
+                .stream()
+                .filter(quote ->
+                        quote.stationId() == order.stationId()
+                )
+                .filter(quote ->
+                        quote.vehicle().equalsIgnoreCase(order.vehicle())
+                )
+                .findFirst()
+                .orElseThrow(NotEnoughVehiclesException::new);
 
+        int updatedVehicleCount = switch (
+                VehicleType.valueOf(selectedQuote.vehicle())
+                ) {
+            case ROBOT ->
+                    stationRepository.decrementRobotCount(
+                            selectedQuote.stationId()
+                    );
+            case DRONE ->
+                    stationRepository.decrementDroneCount(
+                            selectedQuote.stationId()
+                    );
+        };
+
+        if (updatedVehicleCount == 0) {
+            throw new NotEnoughVehiclesException();
+        }
+
+        OrderEntity savedOrder = orderRepository.save(
+                new OrderEntity(
+                        0,
+                        userId,
+                        selectedQuote.destination(),
+                        selectedQuote.packageWeightLbs(),
+                        selectedQuote.price(),
+                        selectedQuote.time(),
+                        selectedQuote.vehicle(),
+                        selectedQuote.stationId(),
+                        OrderStatus.PENDING_DROPOFF.name(),
+                        OffsetDateTime.now(ZoneOffset.UTC).toString()
+                )
+        );
+
+        return toOrderObject(savedOrder);
+    }
     public OrderObject getOrder(int userId, int orderId) {
         OrderEntity order = orderRepository
                 .findByUserIdAndOrderId(userId, orderId)
