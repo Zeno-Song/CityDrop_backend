@@ -1,19 +1,15 @@
 package com.citydrop.backend.order;
 
 import com.citydrop.backend.db.entities.UserEntity;
+import com.citydrop.backend.enums.OrderStatus;
 import com.citydrop.backend.models.requests.SubmissionObject;
 import com.citydrop.backend.models.responses.OrderListResponse;
 import com.citydrop.backend.models.responses.OrderObject;
 import com.citydrop.backend.user.UserService;
 import java.security.Principal;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/order")
@@ -48,6 +44,15 @@ public class OrderController {
             Principal principal) {
         int userId = getAuthenticatedUserId(principal);
         return orderService.getOrder(userId, orderId);
+    }
+
+    @PatchMapping(value = "/{id}/dropped-off", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.OK)
+    public String markDroppedOff(
+            @PathVariable("id") int orderId,
+            Principal principal) {
+        int userId = getAuthenticatedUserId(principal);
+        return orderService.updateStatus(userId, orderId, OrderStatus.AT_STATION.name());
     }
 
     private int getAuthenticatedUserId(Principal principal) {

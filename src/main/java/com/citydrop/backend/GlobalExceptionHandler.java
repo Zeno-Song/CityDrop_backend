@@ -2,6 +2,7 @@ package com.citydrop.backend;
 
 import com.citydrop.backend.deliveryOption.AddressCannotBeGeocodedException;
 import com.citydrop.backend.models.responses.ErrorResponse;
+import com.citydrop.backend.order.InvalidOrderStatusException;
 import com.citydrop.backend.order.OrderNotFoundException;
 import com.citydrop.backend.order.VehicleUnavailableException;
 import com.citydrop.backend.user.UsernameTakenException;
@@ -31,6 +32,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(UsernameTakenException.class)
     public ResponseEntity<ErrorResponse> handleUsernameTakenException(UsernameTakenException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidOrderStatusException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidOrderStatusException(InvalidOrderStatusException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(ex.getMessage()));
     }
 }

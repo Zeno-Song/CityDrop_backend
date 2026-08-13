@@ -1,7 +1,10 @@
 package com.citydrop.backend.db;
 
 import com.citydrop.backend.db.entities.OrderEntity;
+import org.springframework.data.jdbc.repository.query.Modifying;
+import org.springframework.data.jdbc.repository.query.Query;
 import org.springframework.data.repository.ListCrudRepository;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,5 +25,18 @@ public interface OrderRepository
     List<OrderEntity> findByUserIdAndStatus(
             int userId,
             String status
+    );
+
+    @Modifying
+    @Query("""
+        UPDATE orders
+        SET status = :newStatus
+        WHERE order_id = :orderId
+          AND status = :oldStatus
+        """)
+    int updateStatus(
+            @Param("orderId") int orderId,
+            @Param("oldStatus") String oldStatus,
+            @Param("newStatus") String newStatus
     );
 }

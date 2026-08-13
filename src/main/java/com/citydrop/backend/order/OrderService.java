@@ -87,10 +87,10 @@ public class OrderService {
 
         return toOrderObject(savedOrder);
     }
+
+    /** TODO: update getOrder and listOrder with proper lazy (on-call) vehicle count and status update function */
     public OrderObject getOrder(int userId, int orderId) {
-        OrderEntity order = orderRepository
-                .findByUserIdAndOrderId(userId, orderId)
-                .orElseThrow(OrderNotFoundException::new);
+        OrderEntity order = getOrderEntity(userId, orderId);
 
         return toOrderObject(order);
     }
@@ -111,6 +111,33 @@ public class OrderService {
                 .toList();
 
         return new OrderListResponse(active, completed);
+    }
+
+    public String updateStatus(int userId, int orderId, String newStatus) {
+        OrderEntity order = getOrderEntity(userId, orderId);
+        String oldStatus = order.status();
+
+        // guards against illegal status changes
+        if (OrderStatus.valueOf(newStatus).ordinal() <= OrderStatus.valueOf(oldStatus).ordinal()) {
+            throw new InvalidOrderStatusException(order.status());
+        }
+
+        int rowsAffected = orderRepository.updateStatus(
+                orderId, oldStatus, newStatus
+        );
+
+        // guards against concurrent requests
+        if (rowsAffected == 0) {
+            throw new InvalidOrderStatusException(order.status());
+        }
+
+        return newStatus;
+    }
+
+    private OrderEntity getOrderEntity(int userId, int orderId) {
+        return orderRepository
+                .findByUserIdAndOrderId(userId, orderId)
+                .orElseThrow(OrderNotFoundException::new);
     }
 
     private OrderObject toOrderObject(OrderEntity order) {

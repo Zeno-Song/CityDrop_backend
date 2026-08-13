@@ -4,6 +4,7 @@ import com.citydrop.backend.models.responses.DeliveryQuote;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.List;
 
 @RestController
 public class DeliveryOptionController {
@@ -15,7 +16,7 @@ public class DeliveryOptionController {
     }
 
     @GetMapping("/delivery-options")
-    public DeliveryQuote[] getDeliveryOptions(
+    public List<DeliveryQuote> getDeliveryOptions(
             @RequestParam String destStreet,
             @RequestParam String destCity,
             @RequestParam String destState,

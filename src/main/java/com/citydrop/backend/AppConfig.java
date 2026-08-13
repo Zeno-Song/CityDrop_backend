@@ -6,7 +6,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.config.web.servlet.PathRequest;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.JdbcUserDetailsManager;
@@ -37,7 +36,6 @@ public class AppConfig {
                 .csrf(AbstractHttpConfigurer::disable)
 
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
                         .requestMatchers(HttpMethod.POST, "/register", "/login", "/logout").permitAll()
                         .anyRequest().authenticated()
                 )
