@@ -63,7 +63,7 @@ public class DeliveryService {
      */
     private double[] geocode(String address) {
         if (address == null || address.isBlank()) {
-            throw new AddressCannotBeGeocodedException(address);
+            throw new AddressCannotBeGeocodedException();
         }
         int hash = address.trim().toLowerCase().hashCode();
         double latFrac = (hash & 0xFFFF) / 65536.0;
