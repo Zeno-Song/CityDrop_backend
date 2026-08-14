@@ -8,5 +8,5 @@ public record UserEntity(
         @Id int id,
         String username,
         String password,
-        int enabled
+        boolean enabled
 ) {}

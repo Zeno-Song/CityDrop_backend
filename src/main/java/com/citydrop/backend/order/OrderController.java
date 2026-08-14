@@ -46,6 +46,8 @@ public class OrderController {
         return orderService.getOrder(userId, orderId);
     }
 
+    // converts to JSON as a raw String return would be a plain-text over HTTP, which would be inconsistent with the JSON
+    // response bodies all other relative paths use
     @PatchMapping(value = "/{id}/dropped-off", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.OK)
     public String markDroppedOff(
