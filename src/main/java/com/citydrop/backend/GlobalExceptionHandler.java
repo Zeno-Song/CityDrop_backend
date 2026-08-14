@@ -1,6 +1,7 @@
 package com.citydrop.backend;
 
 import com.citydrop.backend.deliveryOption.AddressCannotBeGeocodedException;
+import com.citydrop.backend.deliveryOption.AddressOutOfRangeException;
 import com.citydrop.backend.models.responses.ErrorResponse;
 import com.citydrop.backend.order.InvalidOrderStatusException;
 import com.citydrop.backend.order.OrderNotFoundException;
@@ -16,6 +17,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AddressCannotBeGeocodedException.class)
     public ResponseEntity<ErrorResponse> handleAddressCannotBeGeocodedException(AddressCannotBeGeocodedException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).body(new ErrorResponse(ex.getMessage()));
+    }
+
+    @ExceptionHandler(AddressOutOfRangeException.class)
+    public ResponseEntity<ErrorResponse> handleAddressInvalidException(AddressOutOfRangeException ex) {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).body(new ErrorResponse(ex.getMessage()));
     }
 

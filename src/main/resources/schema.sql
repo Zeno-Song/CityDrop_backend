@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS authorities (
                              authority VARCHAR(50) NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ix_auth_username ON authorities (username, authority);
-
 CREATE TABLE IF NOT EXISTS stations (
                           station_id  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                           coord_x     DOUBLE PRECISION NOT NULL,
@@ -34,4 +33,4 @@ CREATE TABLE IF NOT EXISTS orders (
                             CHECK (status IN ('PENDING_DROPOFF', 'AT_STATION', 'BEFORE_HALF_WAY',
                                               'HALF_WAY', 'MORE_THAN_HALF_WAY', 'DELIVERED')),
                         created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+)

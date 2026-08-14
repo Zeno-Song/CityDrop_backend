@@ -8,3 +8,7 @@ spring:
   sql:
     init:
       mode: always
+google:
+  maps:
+    api-key: AIzaSyAvpxIVG_1mmxomGEWl-3tw90rpowxkKos
+

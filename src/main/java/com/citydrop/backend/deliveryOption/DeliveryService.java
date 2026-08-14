@@ -1,36 +1,43 @@
 package com.citydrop.backend.deliveryOption;
 
-import com.citydrop.backend.db.entities.StationEntity;
-import com.citydrop.backend.models.responses.DeliveryQuote;
-import com.citydrop.backend.enums.VehicleType;
 import com.citydrop.backend.db.StationRepository;
+import com.citydrop.backend.db.entities.StationEntity;
+import com.citydrop.backend.enums.VehicleType;
+import com.citydrop.backend.models.responses.DeliveryQuote;
+import com.google.maps.GeoApiContext;
+import com.google.maps.GeocodingApi;
+import com.google.maps.errors.ApiException;
+import com.google.maps.model.GeocodingResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
-Assumptions:
-
- 1, StationRepository shall provide 1 method: findAll(): List<StationEntity>, which obtain a list of all stationEntity
- 2, StationEntity is a Spring Data JDBC entity
-
+ * Builds delivery quotes: geocodes the destination, pulls all stations,
+ * and produces one DeliveryQuote per (station x vehicle type).
+ *
+ * Assumptions:
+ * 1. StationRepository shall provide findAll(): List<StationEntity>.
+ * 2. StationEntity is a Spring Data JDBC entity.
  */
 @Service
 public class DeliveryService {
 
-    // Mock geocoding bounds: San Francisco, roughly a 7x7 mile area.
-    private static final double SF_MIN_LAT = 37.70;
-    private static final double SF_MAX_LAT = 37.81;
-    private static final double SF_MIN_LNG = -122.52;
-    private static final double SF_MAX_LNG = -122.35;
+    private static final Logger log = LoggerFactory.getLogger(DeliveryService.class);
 
     private final StationRepository stationRepository;
     private final DeliveryAlgorithm deliveryAlgorithm;
-
-    public DeliveryService(StationRepository stationRepository, DeliveryAlgorithm deliveryAlgorithm) {
+    private final GeoApiContext geoApiContext;
+    public DeliveryService(StationRepository stationRepository,
+                           DeliveryAlgorithm deliveryAlgorithm,
+                           GeoApiContext geoApiContext) {
         this.stationRepository = stationRepository;
         this.deliveryAlgorithm = deliveryAlgorithm;
+        this.geoApiContext = geoApiContext;
     }
 
     public List<DeliveryQuote> getDeliveryOptions(String destinationAddress, double packageWeightLbs) {
@@ -38,10 +45,13 @@ public class DeliveryService {
 
         List<DeliveryQuote> quotes = new ArrayList<>();
         for (StationEntity station : stationRepository.findAll()) { // Firstly, iterate 3 stations' positions
-            double distanceMiles = deliveryAlgorithm.computeDistanceMiles(
+            double distanceToStationMiles = deliveryAlgorithm.computeDistanceMiles(
                     station.coordX(), station.coordY(), dest[0], dest[1]); // this is the distance between stations and destinations
-            if (distanceMiles > station.radius()) {
-                continue; // station cannot cover this destination
+            System.out.println("Latitude: " + station.coordX() + ", Longitude: " + station.coordY());
+            System.out.println("Latitude: " + dest[0] + ", Longitude: " + dest[1]);
+            System.out.println("distance:" + distanceToStationMiles);
+            if (distanceToStationMiles > station.radius()) {
+                continue;
             }
             for (VehicleType vehicle : VehicleType.values()) {
                 double time = deliveryAlgorithm.computeTime(station, dest[0], dest[1], vehicle.name());
@@ -55,21 +65,47 @@ public class DeliveryService {
                         station.stationId()));
             }
         }
+        if (quotes.isEmpty()) {
+            throw new AddressOutOfRangeException();
+        }
         return quotes;
     }
 
     /**
-     * This currently a mock method, given the name of the address, return its latitude and longtitude
+     * Resolve a human-readable address to its latitude/longitude using the
+     * Google Maps Geocoding API.
+     *
+     * @param address the destination address string, e.g. "1 Ferry Building, San Francisco, CA, 94105"
+     * @return double[]{latitude, longitude}
+     * @throws AddressCannotBeGeocodedException when the address is blank, or Google cannot
+     *                                          geocode it (no results, partial match, or API error).
      */
     private double[] geocode(String address) {
         if (address == null || address.isBlank()) {
             throw new AddressCannotBeGeocodedException();
         }
-        int hash = address.trim().toLowerCase().hashCode();
-        double latFrac = (hash & 0xFFFF) / 65536.0;
-        double lngFrac = ((hash >>> 16) & 0xFFFF) / 65536.0;
-        double lat = SF_MIN_LAT + latFrac * (SF_MAX_LAT - SF_MIN_LAT);
-        double lng = SF_MIN_LNG + lngFrac * (SF_MAX_LNG - SF_MIN_LNG);
-        return new double[]{lat, lng};
+
+        try {
+            GeocodingResult[] results = GeocodingApi.geocode(geoApiContext, address).await();
+            if (results.length == 0) {
+                log.warn("Google Geocoding returned no results for address '{}'", address);
+                throw new AddressCannotBeGeocodedException();
+            }
+            GeocodingResult result = results[0];
+            if (result.partialMatch) {
+                log.warn("Google Geocoding returned only a partial match for address '{}'", address);
+                throw new AddressCannotBeGeocodedException();
+            }
+            double lat = result.geometry.location.lat;
+            double lng = result.geometry.location.lng;
+            return new double[]{lat, lng};
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Google Geocoding interrupted for address '{}'", address);
+            throw new AddressCannotBeGeocodedException();
+        } catch (IOException | ApiException e) {
+            log.warn("Google Geocoding request failed for address '{}': {}", address, e.getMessage());
+            throw new AddressCannotBeGeocodedException();
+        }
     }
 }
