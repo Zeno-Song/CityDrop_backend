@@ -47,9 +47,6 @@ public class DeliveryService {
         for (StationEntity station : stationRepository.findAll()) { // Firstly, iterate 3 stations' positions
             double distanceToStationMiles = deliveryAlgorithm.computeDistanceMiles(
                     station.coordX(), station.coordY(), dest[0], dest[1]); // this is the distance between stations and destinations
-            System.out.println("Latitude: " + station.coordX() + ", Longitude: " + station.coordY());
-            System.out.println("Latitude: " + dest[0] + ", Longitude: " + dest[1]);
-            System.out.println("distance:" + distanceToStationMiles);
             if (distanceToStationMiles > station.radius()) {
                 continue;
             }
