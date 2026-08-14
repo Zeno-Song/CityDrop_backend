@@ -57,7 +57,7 @@ public class DeliveryAlgorithm {
         double lat1 = Math.toRadians(coordX1);
         double lat2 = Math.toRadians(coordX2);
         double dLat = lat2 - lat1;
-        double dLng = Math.toRadians(coordY2) - Math.toRadians(coordY1);
+        double dLng = Math.toRadians(coordY2 - coordY1);
         double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
                 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
         return 2 * EARTH_RADIUS_MILES * Math.asin(Math.sqrt(a));
