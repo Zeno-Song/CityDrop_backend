@@ -2,21 +2,35 @@ package com.citydrop.backend.deliveryOption;
 
 import com.citydrop.backend.db.entities.StationEntity;
 import com.citydrop.backend.enums.VehicleType;
+import com.google.maps.DirectionsApi;
+import com.google.maps.GeoApiContext;
+import com.google.maps.errors.ApiException;
+import com.google.maps.model.DirectionsResult;
+import com.google.maps.model.DirectionsRoute;
+import com.google.maps.model.TravelMode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import java.io.IOException;
 
 /**
  * Calculates delivery time and cost for one (station, destination, vehicle) combination.
- * Assumptions:
- * - Straight-line distance is used for both vehicles; the robot's lower speed
- *   accounts for it being bound to roads.
- * - coordX = latitude, coordY = longitude, in degrees (matches StationEntity).
- * - Time is returned in MINUTES, cost in USD rounded to 2 decimals.
+ *
+ * Distance model (agreed):
+ * - ROBOT travels on the real San Francisco road network: time comes from the Google
+ *   Directions API driving duration (in minutes). No distance is computed for ROBOT;
+ *   if the API call fails or returns no route, a TimeEstimationFailureException is thrown.
+ * - DRONE flies a straight line: time = haversine distance / DRONE_SPEED_MPH.
+ *
+ * coordX = latitude, coordY = longitude, in degrees (matches StationEntity).
  */
 @Component
 public class DeliveryAlgorithm {
 
+    private static final Logger log = LoggerFactory.getLogger(DeliveryAlgorithm.class);
+
     // ---- tunable constants ----
-    private static final double ROBOT_SPEED_MPH = 10.0; // slow but cheap
     private static final double DRONE_SPEED_MPH = 30.0; // fast but expensive
 
     private static final double ROBOT_BASE_PRICE = 2.0;
@@ -26,17 +40,60 @@ public class DeliveryAlgorithm {
 
     private static final double EARTH_RADIUS_MILES = 3958.8;
 
+    private final GeoApiContext geoApiContext;
+
+    public DeliveryAlgorithm(GeoApiContext geoApiContext) {
+        this.geoApiContext = geoApiContext;
+    }
+
     /**
      * Estimated delivery time from the station to the destination, in minutes.
      */
     public double computeTime(StationEntity station, double destCoordX, double destCoordY, String vehicle) {
+        return switch (VehicleType.valueOf(vehicle)) {
+            case ROBOT -> computeRobotTimeMinutes(station, destCoordX, destCoordY);
+            case DRONE -> computeDroneTimeMinutes(station, destCoordX, destCoordY);
+        };
+    }
+
+    /**
+     * ROBOT: use the Google Directions API driving duration (real road network).
+     * No distance is computed for ROBOT; throws TimeEstimationFailureException when the
+     * API fails or returns no route.
+     */
+    private double computeRobotTimeMinutes(StationEntity station, double destCoordX, double destCoordY) {
+        try {
+            DirectionsResult result = DirectionsApi.newRequest(geoApiContext)
+                    .origin(station.coordX() + "," + station.coordY())
+                    .destination(destCoordX + "," + destCoordY)
+                    .mode(TravelMode.DRIVING)
+                    .await();
+            DirectionsRoute[] routes = result.routes;
+            if (routes != null && routes.length > 0
+                    && routes[0].legs != null && routes[0].legs.length > 0
+                    && routes[0].legs[0].duration != null) {
+                return routes[0].legs[0].duration.inSeconds / 60.0;
+            }
+            log.warn("Directions API returned no route for station {} -> ({},{})",
+                    station.stationId(), destCoordX, destCoordY);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Directions API interrupted for station {} -> ({},{})",
+                    station.stationId(), destCoordX, destCoordY);
+        } catch (IOException | ApiException e) {
+            log.warn("Directions API failed for station {} -> ({},{}): {}",
+                    station.stationId(), destCoordX, destCoordY, e.getMessage());
+        }
+        throw new TimeEstimationFailureException();
+    }
+
+    /**
+     * DRONE: straight-line flight, haversine distance at a fixed speed.
+     */
+    private double computeDroneTimeMinutes(StationEntity station, double destCoordX, double destCoordY) {
         double distanceMiles = computeDistanceMiles(
                 station.coordX(), station.coordY(), destCoordX, destCoordY);
-        double speedMph = switch (VehicleType.valueOf(vehicle)) {
-            case ROBOT -> ROBOT_SPEED_MPH;
-            case DRONE -> DRONE_SPEED_MPH;
-        };
-        return distanceMiles / speedMph * 60.0;
+        return distanceMiles / DRONE_SPEED_MPH * 60.0;
     }
 
     /**
