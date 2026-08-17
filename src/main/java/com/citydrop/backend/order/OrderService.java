@@ -5,6 +5,7 @@ import com.citydrop.backend.db.StationRepository;
 import com.citydrop.backend.db.entities.OrderEntity;
 import com.citydrop.backend.deliveryOption.DeliveryService;
 import com.citydrop.backend.enums.OrderStatus;
+import com.citydrop.backend.models.responses.CancelOrderResponse;
 import com.citydrop.backend.models.responses.OrderIdEntry;
 import com.citydrop.backend.models.responses.OrderListResponse;
 import com.citydrop.backend.models.responses.OrderObject;
@@ -19,6 +20,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 @Service
 public class OrderService {
@@ -88,6 +90,40 @@ public class OrderService {
         return toOrderObject(savedOrder);
     }
 
+    /**
+     * Cancels an order owned by the user, provided it has not been delivered or already
+     * cancelled. Releases the vehicle that was reserved for the order (treated as instantly
+     * available again, regardless of trip progress) and returns the updated order together
+     * with its refund eligibility (eligible only if it was PENDING_DROPOFF or AT_STATION).
+     */
+    @Transactional
+    public CancelOrderResponse cancelOrder(int userId, int orderId) {
+        OrderEntity order = getOrderEntity(userId, orderId);
+
+        OrderStatus currentStatus = OrderStatus.valueOf(order.status());
+        if (currentStatus == OrderStatus.DELIVERED || currentStatus == OrderStatus.CANCELLED) {
+            throw new InvalidOrderStatusException(order.status());
+        }
+
+        boolean refundEligible = currentStatus == OrderStatus.PENDING_DROPOFF
+                || currentStatus == OrderStatus.AT_STATION;
+
+        int rowsAffected = orderRepository.updateStatus(
+                orderId, order.status(), OrderStatus.CANCELLED.name()
+        );
+        if (rowsAffected == 0) {
+            throw new InvalidOrderStatusException(order.status());
+        }
+
+        switch (VehicleType.valueOf(order.vehicle())) {
+            case ROBOT -> stationRepository.incrementRobotCount(order.stationId());
+            case DRONE -> stationRepository.incrementDroneCount(order.stationId());
+        }
+
+        OrderObject cancelledOrder = toOrderObject(order, OrderStatus.CANCELLED.name());
+        return new CancelOrderResponse(cancelledOrder, refundEligible);
+    }
+
     /** TODO: update getOrder and listOrder with proper lazy (on-call) vehicle count and status update function */
     public OrderObject getOrder(int userId, int orderId) {
         OrderEntity order = getOrderEntity(userId, orderId);
@@ -97,16 +133,18 @@ public class OrderService {
 
     public OrderListResponse listOrder(int userId) {
         String deliveredStatus = OrderStatus.DELIVERED.name();
+        String cancelledStatus = OrderStatus.CANCELLED.name();
 
         List<OrderIdEntry> active = orderRepository
                 .findByUserIdAndStatusNot(userId, deliveredStatus)
                 .stream()
+                .filter(order -> !cancelledStatus.equals(order.status()))
                 .map(order -> new OrderIdEntry(order.orderId()))
                 .toList();
 
-        List<OrderIdEntry> completed = orderRepository
-                .findByUserIdAndStatus(userId, deliveredStatus)
-                .stream()
+        List<OrderIdEntry> completed = Stream.concat(
+                        orderRepository.findByUserIdAndStatus(userId, deliveredStatus).stream(),
+                        orderRepository.findByUserIdAndStatus(userId, cancelledStatus).stream())
                 .map(order -> new OrderIdEntry(order.orderId()))
                 .toList();
 
@@ -141,6 +179,10 @@ public class OrderService {
     }
 
     private OrderObject toOrderObject(OrderEntity order) {
+        return toOrderObject(order, order.status());
+    }
+
+    private OrderObject toOrderObject(OrderEntity order, String status) {
         return new OrderObject(
                 order.orderId(),
                 order.destination(),
@@ -149,7 +191,7 @@ public class OrderService {
                 order.time(),
                 order.vehicle(),
                 order.stationId(),
-                order.status(),
+                status,
                 order.createdAt()
         );
     }

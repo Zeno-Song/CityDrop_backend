@@ -3,6 +3,7 @@ package com.citydrop.backend.order;
 import com.citydrop.backend.db.entities.UserEntity;
 import com.citydrop.backend.enums.OrderStatus;
 import com.citydrop.backend.models.requests.SubmissionObject;
+import com.citydrop.backend.models.responses.CancelOrderResponse;
 import com.citydrop.backend.models.responses.OrderListResponse;
 import com.citydrop.backend.models.responses.OrderObject;
 import com.citydrop.backend.user.UserService;
@@ -53,6 +54,15 @@ public class OrderController {
             Principal principal) {
         int userId = getAuthenticatedUserId(principal);
         return orderService.updateStatus(userId, orderId, OrderStatus.AT_STATION.name());
+    }
+
+    @PostMapping(value = "/{id}/cancel", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.OK)
+    public CancelOrderResponse cancelOrder(
+            @PathVariable("id") int orderId,
+            Principal principal) {
+        int userId = getAuthenticatedUserId(principal);
+        return orderService.cancelOrder(userId, orderId);
     }
 
     private int getAuthenticatedUserId(Principal principal) {

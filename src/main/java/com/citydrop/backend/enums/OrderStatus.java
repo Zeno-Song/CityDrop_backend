@@ -6,5 +6,6 @@ public enum OrderStatus {
     BEFORE_HALF_WAY,
     HALF_WAY,
     MORE_THAN_HALF_WAY,
-    DELIVERED
+    DELIVERED,
+    CANCELLED
 }

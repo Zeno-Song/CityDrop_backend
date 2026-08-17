@@ -10,5 +10,5 @@ spring:
       mode: always
 google:
   maps:
-    api-key: AIzaSyAvpxIVG_1mmxomGEWl-3tw90rpowxkKos
+    api-key: ${API_KEY}
 
