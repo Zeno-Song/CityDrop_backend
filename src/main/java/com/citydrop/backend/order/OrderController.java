@@ -1,5 +1,6 @@
 package com.citydrop.backend.order;
 
+import com.citydrop.backend.db.entities.OrderEntity;
 import com.citydrop.backend.db.entities.UserEntity;
 import com.citydrop.backend.enums.OrderStatus;
 import com.citydrop.backend.models.requests.SubmissionObject;
@@ -54,7 +55,7 @@ public class OrderController {
             @PathVariable("id") int orderId,
             Principal principal) {
         int userId = getAuthenticatedUserId(principal);
-        return orderService.updateStatus(userId, orderId, OrderStatus.AT_STATION.name());
+        return orderService.dropOff(userId, orderId);
     }
 
     private int getAuthenticatedUserId(Principal principal) {

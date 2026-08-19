@@ -14,5 +14,6 @@ public record OrderEntity(
         String vehicle,
         int stationId,
         String status,
-        String createdAt
+        String createdAt,
+        String droppedOffAt
 ) {}
