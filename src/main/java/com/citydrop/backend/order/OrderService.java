@@ -82,7 +82,7 @@ public class OrderService {
                         selectedQuote.vehicle(),
                         selectedQuote.stationId(),
                         OrderStatus.PENDING_DROPOFF.name(),
-                        OffsetDateTime.now(ZoneOffset.UTC).toString(),
+                        OffsetDateTime.now(ZoneOffset.UTC),
                         null
                 )
         );
@@ -112,7 +112,7 @@ public class OrderService {
     private static final double HALF_WAY_BAND = 0.10;
 
     private OrderStatus computeProgressStatus(OrderEntity order, OffsetDateTime now) {
-        OffsetDateTime droppedOffAt = OffsetDateTime.parse(order.droppedOffAt());
+        OffsetDateTime droppedOffAt = order.droppedOffAt();
         double elapsedMinutes = Duration.between(droppedOffAt, now).toMillis() / 60000.0;
         double ratio = elapsedMinutes / order.time();
 
@@ -167,7 +167,7 @@ public class OrderService {
 
     public String dropOff(int userId, int orderId) {
         OrderEntity order = getOrderEntity(userId, orderId); // 404 if missing
-        String now = OffsetDateTime.now(ZoneOffset.UTC).toString();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         if (orderRepository.markDroppedOff(orderId, now) == 0) {
             throw new InvalidOrderStatusException(order.status()); // 409, already past PENDING_DROPOFF
         }
@@ -211,7 +211,7 @@ public class OrderService {
                 order.vehicle(),
                 order.stationId(),
                 order.status(),
-                order.createdAt()
+                order.createdAt().toString()
         );
     }
 }
