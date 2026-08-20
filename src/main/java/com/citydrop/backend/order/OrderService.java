@@ -174,27 +174,6 @@ public class OrderService {
         return OrderStatus.AT_STATION.name();
     }
 
-    public String updateStatus(int userId, int orderId, String newStatus) {
-        OrderEntity order = getOrderEntity(userId, orderId);
-        String oldStatus = order.status();
-
-        // guards against illegal status changes
-        if (OrderStatus.valueOf(newStatus).ordinal() <= OrderStatus.valueOf(oldStatus).ordinal()) {
-            throw new InvalidOrderStatusException(order.status());
-        }
-
-        int rowsAffected = orderRepository.updateStatus(
-                orderId, oldStatus, newStatus
-        );
-
-        // guards against concurrent requests
-        if (rowsAffected == 0) {
-            throw new InvalidOrderStatusException(order.status());
-        }
-
-        return newStatus;
-    }
-
     private OrderEntity getOrderEntity(int userId, int orderId) {
         return orderRepository
                 .findByUserIdAndOrderId(userId, orderId)
