@@ -1,18 +1,24 @@
-CREATE TABLE IF NOT EXISTS users (
+-- rebuilds all table on each server start, makes updating table due to SQL changes easy
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS authorities CASCADE;
+DROP TABLE IF EXISTS stations CASCADE;
+DROP TABLE IF EXISTS orders CASCADE;
+
+CREATE TABLE users (
                        id       INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                        username VARCHAR(50)  NOT NULL UNIQUE,
                        password VARCHAR(500) NOT NULL,
                        enabled  BOOLEAN      NOT NULL DEFAULT TRUE
 );
 
-CREATE TABLE IF NOT EXISTS authorities (
+CREATE TABLE authorities (
                              id        INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                              username  VARCHAR(50) NOT NULL REFERENCES users (username),
                              authority VARCHAR(50) NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ix_auth_username ON authorities (username, authority);
+CREATE UNIQUE INDEX ix_auth_username ON authorities (username, authority);
 
-CREATE TABLE IF NOT EXISTS stations (
+CREATE TABLE stations (
                           station_id  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                           coord_x     DOUBLE PRECISION NOT NULL,
                           coord_y     DOUBLE PRECISION NOT NULL,
@@ -21,7 +27,7 @@ CREATE TABLE IF NOT EXISTS stations (
                           drone_count INTEGER NOT NULL DEFAULT 0 CHECK (drone_count >= 0)
 );
 
-CREATE TABLE IF NOT EXISTS orders (
+CREATE TABLE orders (
                         order_id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                         user_id            INTEGER NOT NULL REFERENCES users (id),
                         destination        VARCHAR(500) NOT NULL,
@@ -33,5 +39,6 @@ CREATE TABLE IF NOT EXISTS orders (
                         status             VARCHAR(30) NOT NULL DEFAULT 'PENDING_DROPOFF'
                             CHECK (status IN ('PENDING_DROPOFF', 'AT_STATION', 'BEFORE_HALF_WAY',
                                               'HALF_WAY', 'MORE_THAN_HALF_WAY', 'DELIVERED')),
-                        created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+                        created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        dropped_off_at TIMESTAMPTZ
 );

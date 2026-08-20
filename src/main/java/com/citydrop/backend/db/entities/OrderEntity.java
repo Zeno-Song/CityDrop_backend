@@ -3,6 +3,8 @@ package com.citydrop.backend.db.entities;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Table;
 
+import java.time.OffsetDateTime;
+
 @Table("orders")
 public record OrderEntity(
         @Id int orderId,
@@ -14,5 +16,6 @@ public record OrderEntity(
         String vehicle,
         int stationId,
         String status,
-        String createdAt
+        OffsetDateTime createdAt,
+        OffsetDateTime droppedOffAt
 ) {}

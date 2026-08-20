@@ -1,5 +1,6 @@
 package com.citydrop.backend.order;
 
+import com.citydrop.backend.db.entities.OrderEntity;
 import com.citydrop.backend.db.entities.UserEntity;
 import com.citydrop.backend.enums.OrderStatus;
 import com.citydrop.backend.models.requests.SubmissionObject;
@@ -46,13 +47,15 @@ public class OrderController {
         return orderService.getOrder(userId, orderId);
     }
 
+    // converts to JSON as a raw String return would be a plain-text over HTTP, which would be inconsistent with the JSON
+    // response bodies all other relative paths use
     @PatchMapping(value = "/{id}/dropped-off", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.OK)
     public String markDroppedOff(
             @PathVariable("id") int orderId,
             Principal principal) {
         int userId = getAuthenticatedUserId(principal);
-        return orderService.updateStatus(userId, orderId, OrderStatus.AT_STATION.name());
+        return orderService.dropOff(userId, orderId);
     }
 
     private int getAuthenticatedUserId(Principal principal) {
