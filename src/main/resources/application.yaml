@@ -11,4 +11,15 @@ spring:
 google:
   maps:
     api-key: AIzaSyAvpxIVG_1mmxomGEWl-3tw90rpowxkKos
-
+citydrop:
+  simulation:
+    enabled: ${CITYDROP_SIMULATION_ENABLED}
+    zone-id: ${CITYDROP_SIMULATION_ZONE_ID}
+    demand-update-ms: ${CITYDROP_SIMULATION_DEMAND_UPDATE_MS}
+    peak-hour: ${CITYDROP_SIMULATION_PEAK_HOUR}
+    peak-spread-hours: ${CITYDROP_SIMULATION_PEAK_SPREAD_HOURS}
+    max-markup-rate: ${CITYDROP_SIMULATION_MAX_MARKUP_RATE}
+    inventory-weight: ${CITYDROP_SIMULATION_INVENTORY_WEIGHT}
+    daily-weight: ${CITYDROP_SIMULATION_DAILY_WEIGHT}
+    robot-capacity: ${CITYDROP_SIMULATION_ROBOT_CAPACITY}
+    drone-capacity: ${CITYDROP_SIMULATION_DRONE_CAPACITY}
