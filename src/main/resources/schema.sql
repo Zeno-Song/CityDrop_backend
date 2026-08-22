@@ -39,6 +39,9 @@ CREATE TABLE orders (
                         status             VARCHAR(30) NOT NULL DEFAULT 'PENDING_DROPOFF'
                             CHECK (status IN ('PENDING_DROPOFF', 'AT_STATION', 'BEFORE_HALF_WAY',
                                               'HALF_WAY', 'MORE_THAN_HALF_WAY', 'DELIVERED')),
-                        created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-                        dropped_off_at TIMESTAMPTZ
+                                                created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        dropped_off_at TIMESTAMPTZ,
+                        delivery_started_at TIMESTAMPTZ
 );
+
+CREATE INDEX idx_orders_delivery_started_at ON orders (delivery_started_at);

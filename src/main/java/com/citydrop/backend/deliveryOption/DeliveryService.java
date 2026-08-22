@@ -52,7 +52,7 @@ public class DeliveryService {
             }
             for (VehicleType vehicle : VehicleType.values()) {
                 double time = deliveryAlgorithm.computeTime(station, dest[0], dest[1], vehicle.name());
-                double price = deliveryAlgorithm.computeCost(packageWeightLbs, vehicle.name());
+                double price = deliveryAlgorithm.computeCost(packageWeightLbs, station, vehicle.name());
                 quotes.add(new DeliveryQuote(
                         destinationAddress,
                         packageWeightLbs,

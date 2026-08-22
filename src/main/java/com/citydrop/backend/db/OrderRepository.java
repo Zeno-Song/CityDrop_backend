@@ -55,4 +55,16 @@ public interface OrderRepository
             @Param("orderId") int orderId,
             @Param("now") OffsetDateTime now
     );
+
+    @Query("SELECT * FROM orders WHERE delivery_started_at IS NOT NULL AND status IN ('AT_STATION', 'BEFORE_HALF_WAY', 'HALF_WAY', 'MORE_THAN_HALF_WAY')")
+    List<OrderEntity> findProgressableOrders();
+
+    @Modifying
+    @Query("UPDATE orders SET status = :newStatus, delivery_started_at = :deliveryStartedAt WHERE order_id = :orderId AND status = :expectedStatus")
+    int markAtStation(
+            @Param("orderId") int orderId,
+            @Param("expectedStatus") String expectedStatus,
+            @Param("newStatus") String newStatus,
+            @Param("deliveryStartedAt") String deliveryStartedAt
+    );
 }

@@ -41,10 +41,15 @@ public class DeliveryAlgorithm {
     private static final double EARTH_RADIUS_MILES = 3958.8;
 
     private final GeoApiContext geoApiContext;
+    private final SimulationProperties properties;
+    private final DemandSimulationService demandSimulationService;
 
-    public DeliveryAlgorithm(GeoApiContext geoApiContext) {
+    public DeliveryAlgorithm(GeoApiContext geoApiContext, SimulationProperties properties, DemandSimulationService demandSimulationService) {
         this.geoApiContext = geoApiContext;
+        this.properties = properties;
+        this.demandSimulationService = demandSimulationService;
     }
+
 
     /**
      * Estimated delivery time from the station to the destination, in minutes.
@@ -99,13 +104,43 @@ public class DeliveryAlgorithm {
     /**
      * Compute the cost based on package weight and the vehicle type, in USD.
      */
-    public double computeCost(double packageWeightLbs, String vehicle) {
-        double cost = switch (VehicleType.valueOf(vehicle)) {
+    public double computeCost(double packageWeightLbs, StationEntity station, String vehicle) {
+        // 1. Validates the vehicle with VehicleType.valueOf, as today.
+        VehicleType vehicleType = VehicleType.valueOf(vehicle.toUpperCase());
+
+        // 2. Computes base cost using the existing ROBOT/DRONE base and per-pound constants.
+        double baseCost = switch (vehicleType) {
             case ROBOT -> ROBOT_BASE_PRICE + ROBOT_PRICE_PER_LB * packageWeightLbs;
             case DRONE -> DRONE_BASE_PRICE + DRONE_PRICE_PER_LB * packageWeightLbs;
         };
-        return Math.round(cost * 100.0) / 100.0;
+
+        // 3. Selects availableCount from station.robotCount/droneCount and configuredCapacity from SimulationProperties.
+        int availableCount = (vehicleType == VehicleType.ROBOT) ? station.robotCount() : station.droneCount();
+        int configuredCapacity = (vehicleType == VehicleType.ROBOT) ? properties.getRobotCapacity() : properties.getDroneCapacity();
+
+        // 4. If configuredCapacity ≤ 0, application startup fails through configuration validation rather than dividing by zero.
+        if (configuredCapacity <= 0) {
+            throw new IllegalStateException("Configured capacity must be greater than 0");
+        }
+
+        // 5. inventoryScarcity = clamp(1 − availableCount / configuredCapacity, 0, 1)
+        // (The division here represents exact mathematical division, rather than Java-style integer division).
+        double scarcityRaw = 1.0 - ((double) availableCount / configuredCapacity);
+        double inventoryScarcity = Math.max(0.0, Math.min(1.0, scarcityRaw));
+
+        // 6. demandScore = clamp(inventoryWeight × inventoryScarcity + dailyWeight × currentDemandFactor, 0, 1); inventoryWeight + dailyWeight = 1.0.
+        double currentDemandFactor = demandSimulationService.currentDemandFactor();
+        double demandScoreRaw = (properties.getInventoryWeight() * inventoryScarcity) + (properties.getDailyWeight() * currentDemandFactor);
+        double demandScore = Math.max(0.0, Math.min(1.0, demandScoreRaw));
+
+        // 7. markupRate = maxMarkupRate × demandScore. finalPrice = round(baseCost × (1 + markupRate), 2).
+        double markupRate = properties.getMaxMarkupRate() * demandScore;
+        double finalPriceRaw = baseCost * (1.0 + markupRate);
+
+        // Returns: double finalPrice. With maxMarkupRate = 0.50, finalPrice is guaranteed to be ≤ baseCost × 1.50.
+        return java.math.BigDecimal.valueOf(finalPriceRaw).setScale(2, java.math.RoundingMode.HALF_UP).doubleValue();
     }
+
 
     /**
      * This is an algorithm used to compute the distance between two points on a sphere (the path is a curve)

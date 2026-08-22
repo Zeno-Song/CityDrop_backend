@@ -174,6 +174,21 @@ public class OrderService {
         return OrderStatus.AT_STATION.name();
     }
 
+    public void updateStatus(int userId, int orderId, String newStatus) {
+        OrderEntity order = getOrderEntity(userId, orderId);
+        if (newStatus.toUpperCase().equals(OrderStatus.AT_STATION.name())) {
+            String expectedStatus = OrderStatus.PENDING_DROPOFF.name();
+            OffsetDateTime startedAt = OffsetDateTime.now(ZoneOffset.UTC);
+            String startedAtStr = OffsetDateTime.now(ZoneOffset.UTC).toString();
+            int rowsAffected = orderRepository.markAtStation(orderId, expectedStatus, OrderStatus.AT_STATION.name(), startedAtStr);
+
+            if (rowsAffected == 0) {
+                throw new InvalidOrderStatusException(order.status());
+            }
+        }
+    }
+
+
     private OrderEntity getOrderEntity(int userId, int orderId) {
         return orderRepository
                 .findByUserIdAndOrderId(userId, orderId)
