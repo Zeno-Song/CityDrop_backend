@@ -1,6 +1,7 @@
 package com.citydrop.backend.enums;
 
 public enum OrderStatus {
+    QUEUED,               // Feature 2 - added
     PENDING_DROPOFF,
     AT_STATION,
     BEFORE_HALF_WAY,

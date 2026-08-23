@@ -10,6 +10,15 @@ public interface StationRepository extends ListCrudRepository<StationEntity, Int
 
     StationEntity findByStationId(int stationId);
 
+    // Feature 2: pessimistic row lock, must be called inside a transaction.
+    // Serializes all inventory + queue operations for this station.
+    @Query("""
+            SELECT * FROM stations
+            WHERE station_id = :stationId
+            FOR UPDATE
+            """)
+    StationEntity findByStationIdForUpdate(@Param("stationId") int stationId);
+
     @Modifying
     @Query("""
             UPDATE stations
@@ -28,13 +37,15 @@ public interface StationRepository extends ListCrudRepository<StationEntity, Int
             """)
     int decrementDroneCount(@Param("stationId") int stationId);
 
+    // Feature 2: return type void -> int (rows affected), for observability in handleVehicleAvailable.
+    // Existing callers that ignore the return value are unaffected.
     @Modifying
     @Query("""
             UPDATE stations
             SET robot_count = robot_count + 1
             WHERE station_id = :stationId
             """)
-    void incrementRobotCount(@Param("stationId") int stationId);
+    int incrementRobotCount(@Param("stationId") int stationId);
 
     @Modifying
     @Query("""
@@ -42,5 +53,5 @@ public interface StationRepository extends ListCrudRepository<StationEntity, Int
             SET drone_count = drone_count + 1
             WHERE station_id = :stationId
             """)
-    void incrementDroneCount(@Param("stationId") int stationId);
+    int incrementDroneCount(@Param("stationId") int stationId);
 }

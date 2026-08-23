@@ -36,9 +36,15 @@ CREATE TABLE orders (
                         time DOUBLE PRECISION NOT NULL CHECK (time >= 0),
                         vehicle            VARCHAR(20) NOT NULL CHECK (vehicle IN ('ROBOT', 'DRONE')),
                         station_id         INTEGER NOT NULL REFERENCES stations (station_id),
+                        -- Feature 2 adds 'QUEUED', Feature 1 adds 'CANCELLED'. Shared CHECK: keep this exact set,
+                        -- coordinate with Feature 1 so neither PR drops the other's value.
                         status             VARCHAR(30) NOT NULL DEFAULT 'PENDING_DROPOFF'
-                            CHECK (status IN ('PENDING_DROPOFF', 'AT_STATION', 'BEFORE_HALF_WAY',
-                                              'HALF_WAY', 'MORE_THAN_HALF_WAY', 'DELIVERED')),
+                            CHECK (status IN ('QUEUED', 'PENDING_DROPOFF', 'AT_STATION', 'BEFORE_HALF_WAY',
+                                              'HALF_WAY', 'MORE_THAN_HALF_WAY', 'DELIVERED', 'CANCELLED')),
                         created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
                         dropped_off_at TIMESTAMPTZ
 );
+
+-- Feature 2: partial index for FIFO queue-head lookup (findOldestQueuedForUpdate).
+CREATE INDEX IF NOT EXISTS ix_orders_queue_fifo
+    ON orders (station_id, vehicle, order_id) WHERE status = 'QUEUED';

@@ -27,18 +27,24 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final StationRepository stationRepository;
     private final DeliveryService deliveryService;
+    private final OrderQueueService orderQueueService;   // Feature 2
 
     public OrderService(
             OrderRepository orderRepository,
             StationRepository stationRepository,
-            DeliveryService deliveryService
+            DeliveryService deliveryService,
+            OrderQueueService orderQueueService          // Feature 2
     ) {
         this.orderRepository = orderRepository;
         this.stationRepository = stationRepository;
         this.deliveryService = deliveryService;
+        this.orderQueueService = orderQueueService;
     }
+
     @Transactional
     public OrderObject submitOrder(int userId, SubmissionObject order) {
+        // Price/time computed once inside getDeliveryOptions; do NOT recompute at submit.
+        // Resolve selectedQuote first, then let the queue service decide reserve vs. queue.
         DeliveryQuote selectedQuote = deliveryService
                 .getDeliveryOptions(
                         order.destination(),
@@ -54,38 +60,10 @@ public class OrderService {
                 .findFirst()
                 .orElseThrow(VehicleUnavailableException::new);
 
-        int updatedVehicleCount = switch (
-                VehicleType.valueOf(selectedQuote.vehicle())
-                ) {
-            case ROBOT ->
-                    stationRepository.decrementRobotCount(
-                            selectedQuote.stationId()
-                    );
-            case DRONE ->
-                    stationRepository.decrementDroneCount(
-                            selectedQuote.stationId()
-                    );
-        };
-
-        if (updatedVehicleCount == 0) {
-            throw new VehicleUnavailableException();
-        }
-
-        OrderEntity savedOrder = orderRepository.save(
-                new OrderEntity(
-                        0,
-                        userId,
-                        selectedQuote.destination(),
-                        selectedQuote.packageWeightLbs(),
-                        selectedQuote.price(),
-                        selectedQuote.time(),
-                        selectedQuote.vehicle(),
-                        selectedQuote.stationId(),
-                        OrderStatus.PENDING_DROPOFF.name(),
-                        OffsetDateTime.now(ZoneOffset.UTC),
-                        null
-                )
-        );
+        // Feature 2: reserve-or-queue replaces the old decrement / rows==0 -> 409 block.
+        // queueIfUnavailable == false/omitted keeps the original immediate-failure behavior.
+        OrderEntity savedOrder = orderQueueService.reserveVehicleOrQueue(
+                userId, selectedQuote, order.queueIfUnavailable());
 
         return toOrderObject(savedOrder);
     }
