@@ -20,16 +20,6 @@ public interface OrderRepository
             int orderId
     );
 
-    List<OrderEntity> findByUserIdAndStatusNot(
-            int userId,
-            String status
-    );
-
-    List<OrderEntity> findByUserIdAndStatus(
-            int userId,
-            String status
-    );
-
     @Modifying
     @Query("""
         UPDATE orders
@@ -55,4 +45,19 @@ public interface OrderRepository
             @Param("orderId") int orderId,
             @Param("now") OffsetDateTime now
     );
+
+    @Query("""
+    SELECT * FROM orders
+    WHERE dropped_off_at IS NOT NULL
+      AND status IN ('AT_STATION', 'BEFORE_HALF_WAY', 'HALF_WAY', 'MORE_THAN_HALF_WAY')
+    """)
+    List<OrderEntity> findEligibleForStatusAdvancement();
+
+    @Modifying
+    @Query("""
+    UPDATE orders
+    SET refund_eligible = false
+    WHERE order_id = :orderId
+    """)
+    void clearRefundEligibility(@Param("orderId") int orderId);
 }
