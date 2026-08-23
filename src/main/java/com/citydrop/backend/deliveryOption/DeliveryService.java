@@ -1,5 +1,6 @@
 package com.citydrop.backend.deliveryOption;
 
+import com.citydrop.backend.cache.QuoteSnapshotCache;
 import com.citydrop.backend.db.StationRepository;
 import com.citydrop.backend.db.entities.StationEntity;
 import com.citydrop.backend.enums.VehicleType;
@@ -32,15 +33,27 @@ public class DeliveryService {
     private final StationRepository stationRepository;
     private final DeliveryAlgorithm deliveryAlgorithm;
     private final GeoApiContext geoApiContext;
+    private final QuoteSnapshotCache quoteSnapshotCache;
+
     public DeliveryService(StationRepository stationRepository,
                            DeliveryAlgorithm deliveryAlgorithm,
-                           GeoApiContext geoApiContext) {
+                           GeoApiContext geoApiContext,
+                           QuoteSnapshotCache quoteSnapshotCache) {
         this.stationRepository = stationRepository;
         this.deliveryAlgorithm = deliveryAlgorithm;
         this.geoApiContext = geoApiContext;
+        this.quoteSnapshotCache = quoteSnapshotCache;
     }
 
     public List<DeliveryQuote> getDeliveryOptions(String destinationAddress, double packageWeightLbs) {
+        return getDeliveryOptions(destinationAddress, packageWeightLbs, null);
+    }
+
+    public List<DeliveryQuote> getDeliveryOptions(
+            String destinationAddress,
+            double packageWeightLbs,
+            Integer userId
+    ) {
         double[] dest = geocode(destinationAddress); // [latitude, longitude]
 
         List<DeliveryQuote> quotes = new ArrayList<>();
@@ -64,6 +77,9 @@ public class DeliveryService {
         }
         if (quotes.isEmpty()) {
             throw new AddressOutOfRangeException();
+        }
+        if (userId != null) {
+            quoteSnapshotCache.put(userId, quotes);
         }
         return quotes;
     }

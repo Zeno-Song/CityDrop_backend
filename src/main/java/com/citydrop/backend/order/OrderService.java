@@ -1,9 +1,9 @@
 package com.citydrop.backend.order;
 
+import com.citydrop.backend.cache.QuoteSnapshotCache;
 import com.citydrop.backend.db.OrderRepository;
 import com.citydrop.backend.db.StationRepository;
 import com.citydrop.backend.db.entities.OrderEntity;
-import com.citydrop.backend.deliveryOption.DeliveryService;
 import com.citydrop.backend.enums.OrderStatus;
 import com.citydrop.backend.models.responses.OrderIdEntry;
 import com.citydrop.backend.models.responses.OrderListResponse;
@@ -15,7 +15,6 @@ import com.citydrop.backend.models.requests.SubmissionObject;
 import com.citydrop.backend.models.responses.DeliveryQuote;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
@@ -26,33 +25,28 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final StationRepository stationRepository;
-    private final DeliveryService deliveryService;
+    private final QuoteSnapshotCache quoteSnapshotCache;
 
     public OrderService(
             OrderRepository orderRepository,
             StationRepository stationRepository,
-            DeliveryService deliveryService
+            QuoteSnapshotCache quoteSnapshotCache
     ) {
         this.orderRepository = orderRepository;
         this.stationRepository = stationRepository;
-        this.deliveryService = deliveryService;
+        this.quoteSnapshotCache = quoteSnapshotCache;
     }
     @Transactional
     public OrderObject submitOrder(int userId, SubmissionObject order) {
-        DeliveryQuote selectedQuote = deliveryService
-                .getDeliveryOptions(
+        DeliveryQuote selectedQuote = quoteSnapshotCache
+                .findMatching(
+                        userId,
                         order.destination(),
-                        order.packageWeightLbs()
+                        order.packageWeightLbs(),
+                        order.stationId(),
+                        order.vehicle()
                 )
-                .stream()
-                .filter(quote ->
-                        quote.stationId() == order.stationId()
-                )
-                .filter(quote ->
-                        quote.vehicle().equalsIgnoreCase(order.vehicle())
-                )
-                .findFirst()
-                .orElseThrow(VehicleUnavailableException::new);
+                .orElseThrow(QuoteExpiredException::new);
 
         int updatedVehicleCount = switch (
                 VehicleType.valueOf(selectedQuote.vehicle())
