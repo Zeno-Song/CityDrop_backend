@@ -17,9 +17,9 @@ import java.util.List;
 
 // Feature 5 — job 1 (status advancement) only; job 2 (demand pricing) is out of scope for this pass.
 @Service
-public class SchedulerService {
+public class Scheduler {
 
-    private static final Logger log = LoggerFactory.getLogger(SchedulerService.class);
+    private static final Logger log = LoggerFactory.getLogger(Scheduler.class);
 
     private static final long STATUS_TICK_INTERVAL_MS = 20_000; // 20s; tune once real order volume is known
     private static final double HALF_WAY_BAND = 0.10;
@@ -27,7 +27,7 @@ public class SchedulerService {
     private final OrderRepository orderRepository;
     private final OrderQueueService orderQueueService;
 
-    public SchedulerService(OrderRepository orderRepository, OrderQueueService orderQueueService) {
+    public Scheduler(OrderRepository orderRepository, OrderQueueService orderQueueService) {
         this.orderRepository = orderRepository;
         this.orderQueueService = orderQueueService;
     }
