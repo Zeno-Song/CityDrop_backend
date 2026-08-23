@@ -20,16 +20,6 @@ public interface OrderRepository
             int orderId
     );
 
-    List<OrderEntity> findByUserIdAndStatusNot(
-            int userId,
-            String status
-    );
-
-    List<OrderEntity> findByUserIdAndStatus(
-            int userId,
-            String status
-    );
-
     @Modifying
     @Query("""
         UPDATE orders
