@@ -77,7 +77,7 @@ public class DeliveryService {
      * @throws AddressCannotBeGeocodedException when the address is blank, or Google cannot
      *                                          geocode it (no results, partial match, or API error).
      */
-    private double[] geocode(String address) {
+    public double[] geocode(String address) {
         if (address == null || address.isBlank()) {
             throw new AddressCannotBeGeocodedException();
         }

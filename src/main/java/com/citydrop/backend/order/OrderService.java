@@ -90,79 +90,22 @@ public class OrderService {
         return toOrderObject(savedOrder);
     }
 
-    /** TODO: update getOrder and listOrder with proper lazy (on-call) vehicle count and status update function */
+    /** getOrder and listOrder retrieve actively updated vehicle count and statuses */
     public OrderObject getOrder(int userId, int orderId) {
-        return toOrderObject(refreshStatus(getOrderEntity(userId, orderId)));
+        return toOrderObject(getOrderEntity(userId, orderId));
     }
 
     public OrderListResponse listOrder(int userId) {
-        List<OrderEntity> refreshed = orderRepository.findByUserId(userId)
-                .stream().map(this::refreshStatus).toList();
+        List<OrderEntity> orders = orderRepository.findByUserId(userId);
 
-        var active = refreshed.stream()
-                .filter(o -> !o.status().equals(OrderStatus.DELIVERED.name()))
+        var active = orders.stream()
+                .filter(o -> !OrderStatus.valueOf(o.status()).isTerminal())
                 .map(o -> new OrderIdEntry(o.orderId())).toList();
-        var completed = refreshed.stream()
-                .filter(o -> o.status().equals(OrderStatus.DELIVERED.name()))
+        var completed = orders.stream()
+                .filter(o -> OrderStatus.valueOf(o.status()).isTerminal())
                 .map(o -> new OrderIdEntry(o.orderId())).toList();
 
         return new OrderListResponse(active, completed);
-    }
-
-    private static final double HALF_WAY_BAND = 0.10;
-
-    private OrderStatus computeProgressStatus(OrderEntity order, OffsetDateTime now) {
-        OffsetDateTime droppedOffAt = order.droppedOffAt();
-        double elapsedMinutes = Duration.between(droppedOffAt, now).toMillis() / 60000.0;
-        double ratio = elapsedMinutes / order.time();
-
-        if (ratio >= 1.0) return OrderStatus.DELIVERED;
-        if (ratio >= 0.5 + HALF_WAY_BAND) return OrderStatus.MORE_THAN_HALF_WAY;
-        if (ratio >= 0.5 - HALF_WAY_BAND) return OrderStatus.HALF_WAY;
-        return OrderStatus.BEFORE_HALF_WAY;
-    }
-
-    private OrderEntity refreshStatus(OrderEntity order) {
-        String status = order.status();
-        if (status.equals(OrderStatus.PENDING_DROPOFF.name())
-                || status.equals(OrderStatus.DELIVERED.name())) {
-            return order; // idea #4: no-op at these two statuses
-        }
-
-        OrderStatus target = computeProgressStatus(order, OffsetDateTime.now(ZoneOffset.UTC));
-        if (target.name().equals(status)) return order;
-
-        // CAS guard: only the request that actually flips the row applies the vehicle-count side effect
-        int rowsAffected = orderRepository.updateStatus(order.orderId(), status, target.name());
-        if (rowsAffected == 0) {  // lost a race to a concurrent get/listOrder call on the same order — reload authoritative state
-            return orderRepository.findByUserIdAndOrderId(order.userId(), order.orderId())
-                    .orElseThrow(OrderNotFoundException::new);
-        }
-
-        if (target == OrderStatus.DELIVERED) {
-            switch (VehicleType.valueOf(order.vehicle())) {
-                case ROBOT -> stationRepository.incrementRobotCount(order.stationId());
-                case DRONE -> stationRepository.incrementDroneCount(order.stationId());
-            }
-        }
-
-        return withStatus(order, target.name());
-    }
-
-    private OrderEntity withStatus(OrderEntity order, String newStatus) {
-        return new OrderEntity(
-                order.orderId(),
-                order.userId(),
-                order.destination(),
-                order.packageWeightLbs(),
-                order.price(),
-                order.time(),
-                order.vehicle(),
-                order.stationId(),
-                newStatus,               // <- the one field being changed
-                order.createdAt(),
-                order.droppedOffAt()
-        );
     }
 
     public String dropOff(int userId, int orderId) {
@@ -172,27 +115,6 @@ public class OrderService {
             throw new InvalidOrderStatusException(order.status()); // 409, already past PENDING_DROPOFF
         }
         return OrderStatus.AT_STATION.name();
-    }
-
-    public String updateStatus(int userId, int orderId, String newStatus) {
-        OrderEntity order = getOrderEntity(userId, orderId);
-        String oldStatus = order.status();
-
-        // guards against illegal status changes
-        if (OrderStatus.valueOf(newStatus).ordinal() <= OrderStatus.valueOf(oldStatus).ordinal()) {
-            throw new InvalidOrderStatusException(order.status());
-        }
-
-        int rowsAffected = orderRepository.updateStatus(
-                orderId, oldStatus, newStatus
-        );
-
-        // guards against concurrent requests
-        if (rowsAffected == 0) {
-            throw new InvalidOrderStatusException(order.status());
-        }
-
-        return newStatus;
     }
 
     private OrderEntity getOrderEntity(int userId, int orderId) {
