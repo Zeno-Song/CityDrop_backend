@@ -1,5 +1,6 @@
 package com.citydrop.backend;
 
+import com.citydrop.backend.chat.ChatUnavailableException;
 import com.citydrop.backend.deliveryOption.AddressCannotBeGeocodedException;
 import com.citydrop.backend.deliveryOption.AddressOutOfRangeException;
 import com.citydrop.backend.deliveryOption.TimeEstimationFailureException;
@@ -50,5 +51,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidOrderStatusException.class)
     public ResponseEntity<ErrorResponse> handleInvalidOrderStatusException(InvalidOrderStatusException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(ex.getMessage()));
+    }
+
+    @ExceptionHandler(ChatUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleChatUnavailableException(ChatUnavailableException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(new ErrorResponse(ex.getMessage()));
     }
 }
