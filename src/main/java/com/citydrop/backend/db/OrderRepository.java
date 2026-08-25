@@ -13,6 +13,7 @@ import java.util.Optional;
 
 public interface OrderRepository
         extends ListCrudRepository<OrderEntity, Integer> {
+
     List<OrderEntity> findByUserId(int userId);
 
     Optional<OrderEntity> findByUserIdAndOrderId(
@@ -60,4 +61,44 @@ public interface OrderRepository
     WHERE order_id = :orderId
     """)
     void clearRefundEligibility(@Param("orderId") int orderId);
+    // Feature 2 - no-bypass: block a new order from grabbing a vehicle while any QUEUED order
+    // exists for the same station + vehicle.
+    @Query("""
+        SELECT EXISTS (
+            SELECT 1 FROM orders
+            WHERE station_id = :stationId
+              AND vehicle = :vehicle
+              AND status = 'QUEUED'
+        )
+        """)
+    boolean existsQueuedOrder(
+            @Param("stationId") int stationId,
+            @Param("vehicle") String vehicle
+    );
+
+    // Feature 2 - FIFO queue head, locked. Ordered by order_id (auto-increment), NOT created_at.
+    @Query("""
+        SELECT * FROM orders
+        WHERE status = 'QUEUED'
+          AND station_id = :stationId
+          AND vehicle = :vehicle
+        ORDER BY order_id ASC
+        LIMIT 1
+        FOR UPDATE
+        """)
+    OrderEntity findOldestQueuedForUpdate(
+            @Param("stationId") int stationId,
+            @Param("vehicle") String vehicle
+    );
+
+    // Feature 2 - CAS: QUEUED -> PENDING_DROPOFF. rows == 0 means the head was cancelled
+    // concurrently; caller should try the next one.
+    @Modifying
+    @Query("""
+        UPDATE orders
+        SET status = 'PENDING_DROPOFF'
+        WHERE order_id = :orderId
+          AND status = 'QUEUED'
+        """)
+    int assignQueuedOrder(@Param("orderId") int orderId);
 }
