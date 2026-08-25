@@ -17,5 +17,6 @@ public record OrderEntity(
         int stationId,
         String status,
         OffsetDateTime createdAt,
-        OffsetDateTime droppedOffAt
+        OffsetDateTime droppedOffAt,
+        boolean refundEligible
 ) {}

@@ -4,6 +4,7 @@ import com.citydrop.backend.db.entities.OrderEntity;
 import com.citydrop.backend.db.entities.UserEntity;
 import com.citydrop.backend.enums.OrderStatus;
 import com.citydrop.backend.models.requests.SubmissionObject;
+import com.citydrop.backend.models.responses.CancelOrderResponse;
 import com.citydrop.backend.models.responses.OrderListResponse;
 import com.citydrop.backend.models.responses.OrderObject;
 import com.citydrop.backend.user.UserService;
@@ -56,6 +57,15 @@ public class OrderController {
             Principal principal) {
         int userId = getAuthenticatedUserId(principal);
         return orderService.dropOff(userId, orderId);
+    }
+
+    @PostMapping("/{id}/cancel")
+    @ResponseStatus(HttpStatus.OK)
+    public CancelOrderResponse cancelOrder(
+            @PathVariable("id") int orderId,
+            Principal principal) {
+        int userId = getAuthenticatedUserId(principal);
+        return orderService.cancelOrder(userId, orderId);
     }
 
     private int getAuthenticatedUserId(Principal principal) {
