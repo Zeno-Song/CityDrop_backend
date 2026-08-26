@@ -15,6 +15,13 @@ spring:
 google:
   maps:
     api-key: AIzaSyAvpxIVG_1mmxomGEWl-3tw90rpowxkKos
+openai:
+  # Feature 4 (AI Customer Support): set OPENAI_API_KEY in your environment,
+  # never commit it. Chat requests fail with a clear 503 (ChatUnavailableException)
+  # if it's unset, instead of the app refusing to start.
+  api-key: ${OPENAI_API_KEY:}
+  model: ${OPENAI_MODEL:gpt-4o-mini}
+
 citydrop:
   cache:
     quote-lock-ttl: 5m
