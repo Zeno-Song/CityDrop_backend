@@ -5,10 +5,16 @@ spring:
     url: jdbc:postgresql://localhost:5432/citydrop
     username: postgres
     password: secret
+  data:
+    redis:
+      host: localhost
+      port: 6379
   sql:
     init:
       mode: always
 google:
   maps:
     api-key: AIzaSyAvpxIVG_1mmxomGEWl-3tw90rpowxkKos
-
+citydrop:
+  cache:
+    quote-lock-ttl: 5m
