@@ -15,9 +15,6 @@ import com.citydrop.backend.models.requests.SubmissionObject;
 import com.citydrop.backend.models.responses.DeliveryQuote;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-
 import java.util.List;
 
 @Service
@@ -75,13 +72,14 @@ public class OrderService {
         return new OrderListResponse(active, completed);
     }
 
+    // A vehicle is claimed here, not at submitOrder -- see OrderQueueService.claimVehicleAtDropoff.
+    // Returns AT_STATION if one was idle, or QUEUED if the package arrived with none free.
     public String dropOff(int userId, int orderId) {
         OrderEntity order = getOrderEntity(userId, orderId); // 404 if missing
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        if (orderRepository.markDroppedOff(orderId, now) == 0) {
+        if (!order.status().equals(OrderStatus.PENDING_DROPOFF.name())) {
             throw new InvalidOrderStatusException(order.status()); // 409, already past PENDING_DROPOFF
         }
-        return OrderStatus.AT_STATION.name();
+        return orderQueueService.claimVehicleAtDropoff(order);
     }
 
     @Transactional
@@ -104,7 +102,12 @@ public class OrderService {
             }
 
             if (orderRepository.updateStatus(orderId, order.status(), OrderStatus.CANCELLED.name()) == 1) {
-                orderQueueService.handleVehicleAvailable(order.stationId(), order.vehicle());
+                // PENDING_DROPOFF is just a commitment to show up -- it never claimed a vehicle
+                // (see OrderQueueService.claimVehicleAtDropoff), so there's nothing to release.
+                // Everything past that (AT_STATION onward) does hold one.
+                if (!order.status().equals(OrderStatus.PENDING_DROPOFF.name())) {
+                    orderQueueService.handleVehicleAvailable(order.stationId(), order.vehicle());
+                }
                 return toCancelResponse(withStatus(order, OrderStatus.CANCELLED.name()));
             }
             // row changed between the read and this write (e.g. scheduler advanced it) - re-fetch and re-evaluate
