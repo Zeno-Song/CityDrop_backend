@@ -6,5 +6,11 @@ public enum OrderStatus {
     BEFORE_HALF_WAY,
     HALF_WAY,
     MORE_THAN_HALF_WAY,
-    DELIVERED
+    DELIVERED,
+    CANCELLED,
+    QUEUED;
+
+    public boolean isTerminal() {
+        return this == CANCELLED || this == DELIVERED;
+    }
 }

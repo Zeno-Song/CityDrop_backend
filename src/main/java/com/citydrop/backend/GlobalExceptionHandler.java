@@ -7,6 +7,7 @@ import com.citydrop.backend.deliveryOption.TimeEstimationFailureException;
 import com.citydrop.backend.models.responses.ErrorResponse;
 import com.citydrop.backend.order.InvalidOrderStatusException;
 import com.citydrop.backend.order.OrderNotFoundException;
+import com.citydrop.backend.order.QuoteExpiredException;
 import com.citydrop.backend.order.VehicleUnavailableException;
 import com.citydrop.backend.user.UsernameTakenException;
 import org.springframework.http.HttpStatus;
@@ -36,6 +37,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(VehicleUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleVehicleUnavailableException(VehicleUnavailableException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(ex.getMessage()));
+    }
+
+    @ExceptionHandler(QuoteExpiredException.class)
+    public ResponseEntity<ErrorResponse> handleQuoteExpiredException(QuoteExpiredException ex) {
+        return ResponseEntity.status(HttpStatus.GONE).body(new ErrorResponse(ex.getMessage()));
     }
 
     @ExceptionHandler(OrderNotFoundException.class)

@@ -5,6 +5,10 @@ spring:
     url: jdbc:postgresql://localhost:5432/citydrop
     username: postgres
     password: secret
+  data:
+    redis:
+      host: localhost
+      port: 6379
   sql:
     init:
       mode: always
@@ -18,3 +22,8 @@ openai:
   api-key: ${OPENAI_API_KEY:}
   model: ${OPENAI_MODEL:gpt-4o-mini}
 
+citydrop:
+  cache:
+    quote-lock-ttl: 5m
+    geocode-ttl: 24h
+    travel-time-ttl: 15m

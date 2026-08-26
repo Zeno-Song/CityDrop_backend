@@ -39,6 +39,7 @@ public class AppConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/register", "/login", "/logout").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/delivery-options").permitAll()
                         .anyRequest().authenticated()
                 )
 
