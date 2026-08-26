@@ -38,7 +38,7 @@ class QuoteSnapshotCacheTest {
         cache = new QuoteSnapshotCache(
                 redisTemplate,
                 objectMapper,
-                new CacheProperties(Duration.ofMinutes(5))
+                new CacheProperties(Duration.ofMinutes(5), null, null)
         );
     }
 

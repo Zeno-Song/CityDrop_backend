@@ -18,3 +18,5 @@ google:
 citydrop:
   cache:
     quote-lock-ttl: 5m
+    geocode-ttl: 24h
+    travel-time-ttl: 15m

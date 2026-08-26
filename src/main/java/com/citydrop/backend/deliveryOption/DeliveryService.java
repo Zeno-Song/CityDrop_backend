@@ -1,6 +1,8 @@
 package com.citydrop.backend.deliveryOption;
 
+import com.citydrop.backend.cache.GeocodeCache;
 import com.citydrop.backend.cache.QuoteSnapshotCache;
+import com.citydrop.backend.cache.TravelTimeCache;
 import com.citydrop.backend.db.StationRepository;
 import com.citydrop.backend.db.entities.StationEntity;
 import com.citydrop.backend.enums.VehicleType;
@@ -34,15 +36,21 @@ public class DeliveryService {
     private final DeliveryAlgorithm deliveryAlgorithm;
     private final GeoApiContext geoApiContext;
     private final QuoteSnapshotCache quoteSnapshotCache;
+    private final GeocodeCache geocodeCache;
+    private final TravelTimeCache travelTimeCache;
 
     public DeliveryService(StationRepository stationRepository,
                            DeliveryAlgorithm deliveryAlgorithm,
                            GeoApiContext geoApiContext,
-                           QuoteSnapshotCache quoteSnapshotCache) {
+                           QuoteSnapshotCache quoteSnapshotCache,
+                           GeocodeCache geocodeCache,
+                           TravelTimeCache travelTimeCache) {
         this.stationRepository = stationRepository;
         this.deliveryAlgorithm = deliveryAlgorithm;
         this.geoApiContext = geoApiContext;
         this.quoteSnapshotCache = quoteSnapshotCache;
+        this.geocodeCache = geocodeCache;
+        this.travelTimeCache = travelTimeCache;
     }
 
     public List<DeliveryQuote> getDeliveryOptions(String destinationAddress, double packageWeightLbs) {
@@ -54,27 +62,26 @@ public class DeliveryService {
             double packageWeightLbs,
             Integer userId
     ) {
-        double[] dest = geocode(destinationAddress); // [latitude, longitude]
+        double[] dest = geocodeCache.getOrLoad(destinationAddress, () -> geocode(destinationAddress));
 
         List<DeliveryQuote> quotes = new ArrayList<>();
-        for (StationEntity station : stationRepository.findAll()) { // Firstly, iterate 3 stations' positions
+        for (StationEntity station : stationRepository.findAll()) {
             double distanceToStationMiles = deliveryAlgorithm.computeDistanceMiles(
-                    station.coordX(), station.coordY(), dest[0], dest[1]); // this is the distance between stations and destinations
+                    station.coordX(), station.coordY(), dest[0], dest[1]);
             if (distanceToStationMiles > station.radius()) {
                 continue;
             }
             for (VehicleType vehicle : VehicleType.values()) {
-                double time = deliveryAlgorithm.computeTime(station, dest[0], dest[1], vehicle.name());
+                double time = travelTimeCache.getOrLoad(
+                        station.stationId(), dest[0], dest[1], vehicle.name(),
+                        () -> deliveryAlgorithm.computeTime(station, dest[0], dest[1], vehicle.name())
+                );
                 double price = deliveryAlgorithm.computeCost(packageWeightLbs, vehicle.name());
                 quotes.add(new DeliveryQuote(
-                        destinationAddress,
-                        packageWeightLbs,
-                        vehicle.name(),
-                        price,
-                        time,
-                        station.stationId()));
+                        destinationAddress, packageWeightLbs, vehicle.name(), price, time, station.stationId()));
             }
         }
+
         if (quotes.isEmpty()) {
             throw new AddressOutOfRangeException();
         }
