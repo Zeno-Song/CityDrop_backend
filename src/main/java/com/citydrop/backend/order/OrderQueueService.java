@@ -101,7 +101,8 @@ public class OrderQueueService {
                 q.stationId(),
                 status.name(),
                 OffsetDateTime.now(),
-                null
+                null,
+                true
         );
     }
 }

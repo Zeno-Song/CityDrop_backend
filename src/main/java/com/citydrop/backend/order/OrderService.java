@@ -4,6 +4,7 @@ import com.citydrop.backend.cache.QuoteSnapshotCache;
 import com.citydrop.backend.db.OrderRepository;
 import com.citydrop.backend.db.entities.OrderEntity;
 import com.citydrop.backend.enums.OrderStatus;
+import com.citydrop.backend.models.responses.CancelOrderResponse;
 import com.citydrop.backend.models.responses.OrderIdEntry;
 import com.citydrop.backend.models.responses.OrderListResponse;
 import com.citydrop.backend.models.responses.OrderObject;
@@ -83,10 +84,59 @@ public class OrderService {
         return OrderStatus.AT_STATION.name();
     }
 
+    @Transactional
+    public CancelOrderResponse cancelOrder(int userId, int orderId) {
+        OrderEntity order = getOrderEntity(userId, orderId); // 404 if missing/not owned
+
+        // QUEUED never had a vehicle decremented, so cancelling it needs no release and is
+        // always refund-eligible. If assignQueuedOrder wins the race first, the row is now
+        // PENDING_DROPOFF - re-fetch and fall through to the general (non-QUEUED) handling below.
+        if (order.status().equals(OrderStatus.QUEUED.name())) {
+            if (orderRepository.updateStatus(orderId, OrderStatus.QUEUED.name(), OrderStatus.CANCELLED.name()) == 1) {
+                return toCancelResponse(withStatus(order, OrderStatus.CANCELLED.name()));
+            }
+            order = getOrderEntity(userId, orderId);
+        }
+
+        while (true) {
+            if (OrderStatus.valueOf(order.status()).isTerminal()) {
+                throw new InvalidOrderStatusException(order.status()); // 409, already delivered/cancelled
+            }
+
+            if (orderRepository.updateStatus(orderId, order.status(), OrderStatus.CANCELLED.name()) == 1) {
+                orderQueueService.handleVehicleAvailable(order.stationId(), order.vehicle());
+                return toCancelResponse(withStatus(order, OrderStatus.CANCELLED.name()));
+            }
+            // row changed between the read and this write (e.g. scheduler advanced it) - re-fetch and re-evaluate
+            order = getOrderEntity(userId, orderId);
+        }
+    }
+
     private OrderEntity getOrderEntity(int userId, int orderId) {
         return orderRepository
                 .findByUserIdAndOrderId(userId, orderId)
                 .orElseThrow(OrderNotFoundException::new);
+    }
+
+    private OrderEntity withStatus(OrderEntity order, String newStatus) {
+        return new OrderEntity(
+                order.orderId(),
+                order.userId(),
+                order.destination(),
+                order.packageWeightLbs(),
+                order.price(),
+                order.time(),
+                order.vehicle(),
+                order.stationId(),
+                newStatus,
+                order.createdAt(),
+                order.droppedOffAt(),
+                order.refundEligible()
+        );
+    }
+
+    private CancelOrderResponse toCancelResponse(OrderEntity order) {
+        return new CancelOrderResponse(toOrderObject(order), order.refundEligible());
     }
 
     private OrderObject toOrderObject(OrderEntity order) {
