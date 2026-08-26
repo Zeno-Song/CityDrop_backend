@@ -14,6 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -55,7 +56,7 @@ public class ChatService {
             How CityDrop works, for general questions (answer directly from \
             this, don't guess beyond it):
             - There are 3 stations in the San Francisco area, each covering a \
-              4-mile delivery radius. An address outside all three radii \
+              5-mile delivery radius. An address outside all three radii \
               can't be delivered to.
             - ROBOT: drives the real road network (Google Directions gives \
               the actual driving time). Pricing is a flat $2.00 base + \
@@ -71,16 +72,47 @@ public class ChatService {
               free up (queueing) instead of the order failing outright. If \
               an order is QUEUED, you can say it's waiting for a vehicle, \
               but there's no way to know its position in line or how long \
-              that will take -- never guess a wait time.
+              that will take -- never guess a wait time for a QUEUED order.
             - Order status is usually PENDING_DROPOFF -> AT_STATION -> \
               BEFORE_HALF_WAY -> HALF_WAY -> MORE_THAN_HALF_WAY -> DELIVERED. \
               An order can also be QUEUED (waiting for a vehicle, before \
-              PENDING_DROPOFF) or CANCELLED (at any point before DELIVERED).
+              PENDING_DROPOFF) or CANCELLED (at any point before DELIVERED). \
+              A vehicle isn't claimed at order time -- PENDING_DROPOFF just \
+              means the order is placed; the package hasn't reached the \
+              station yet, so no clock has started.
+            - This "never guess a wait time" restriction is ONLY about a \
+              QUEUED order's position in line -- it does NOT apply to \
+              get_order's own `time` field. That field is the real, already- \
+              computed delivery duration in minutes (counted from drop-off) \
+              for that specific order's vehicle+distance, not a guess -- once \
+              an order is AT_STATION or later (i.e. has actually been dropped \
+              off and picked up), share it plainly when asked how long it \
+              will take or when it'll arrive. For PENDING_DROPOFF, say it \
+              hasn't been dropped off yet so the clock hasn't started, but \
+              you can still mention `time` as how long it'll take once it is.
 
             You can look up the signed-in user's own orders with the tools \
             provided (status, price, vehicle, station). Use list_orders to \
-            see which order ids exist, then get_order for details on a \
-            specific one.
+            see which order ids exist, then get_order for the freshest \
+            details on a specific one (list_orders' own destination/status/etc. \
+            can be a moment stale by the time you reply, since delivery status \
+            keeps advancing). If the user asks about "my order" without \
+            saying which one and list_orders comes back with more than one \
+            active order, don't call get_order on all of them -- ask which \
+            order id they mean first (you can mention how many active orders \
+            they have) and wait for their answer. If they only have one \
+            active order, or they already gave an id, just look it up \
+            directly.
+
+            If the user doesn't know the order id but describes it some other \
+            way instead (the destination, roughly when they sent it), call \
+            list_orders and search its results yourself for the best match on \
+            what they said -- don't ask them for the id when you can find it \
+            this way. If exactly one order matches, say which order id it is \
+            and answer their actual question about it. If more than one \
+            plausibly matches, list those candidates (id + destination + \
+            date) and ask them to confirm which one. If none match, say so \
+            plainly rather than guessing.
 
             If asked what a delivery to some destination would cost or how \
             long it would take -- a NEW destination, not an existing order -- \
@@ -97,7 +129,11 @@ public class ChatService {
             You cannot place an order yourself either -- if the user clearly \
             wants to start a new one (not just asking what it would cost), \
             call suggest_create_order once and then tell them you've pulled \
-            up the order form for them.
+            up the order form for them. Pass along the destination and/or \
+            weight on that same call if the user has already mentioned them \
+            (this turn or earlier in the conversation) -- don't make them \
+            repeat something they already told you, and don't ask for \
+            either one just to fill in this call if they haven't said it.
 
             Pay attention to the user's tone and match your reply to it: if \
             they sound frustrated, angry, or urgent, open by acknowledging \
@@ -136,7 +172,10 @@ public class ChatService {
             ),
             tool(
                     "list_orders",
-                    "List the current user's own order ids, split into active and completed.",
+                    "List the current user's own orders (id, destination, status, price, "
+                            + "vehicle, station, createdAt), split into active and completed. Use "
+                            + "this to find an order the user describes by destination or "
+                            + "roughly when they sent it, when they don't give you an id.",
                     Map.of("type", "object", "properties", Map.of())
             ),
             tool(
@@ -151,7 +190,10 @@ public class ChatService {
                                     "destination", Map.of(
                                             "type", "string",
                                             "description", "Full destination address, e.g. "
-                                                    + "\"1398 Valencia St, San Francisco, CA 94110\""
+                                                    + "\"1398 Valencia St, San Francisco, CA 94110\". "
+                                                    + "All deliveries are within San Francisco -- if the "
+                                                    + "user gives a bare street address with no city, "
+                                                    + "add \", San Francisco, CA\" yourself."
                                     ),
                                     "packageWeightLbs", Map.of(
                                             "type", "number",
@@ -166,8 +208,25 @@ public class ChatService {
                     "suggest_create_order",
                     "Call this when the user clearly wants to start placing a new order "
                             + "(not just asking for a price). Takes no action itself -- it just "
-                            + "signals the app to show the user a shortcut to the order form.",
-                    Map.of("type", "object", "properties", Map.of())
+                            + "signals the app to show the user a shortcut to the order form, "
+                            + "pre-filled with destination/weight if given.",
+                    Map.of(
+                            "type", "object",
+                            "properties", Map.of(
+                                    "destination", Map.of(
+                                            "type", "string",
+                                            "description", "The destination address, if the user has "
+                                                    + "already said one this turn or earlier -- same "
+                                                    + "format/normalization as get_delivery_quote's "
+                                                    + "destination. Omit if they haven't said one yet."
+                                    ),
+                                    "packageWeightLbs", Map.of(
+                                            "type", "number",
+                                            "description", "The package weight in pounds, if the user "
+                                                    + "has already said one. Omit if they haven't."
+                                    )
+                            )
+                    )
             ),
             tool(
                     "flag_frustrated_user",
@@ -232,6 +291,12 @@ public class ChatService {
         boolean suggestCreateOrder = false;
         boolean offerHumanHelp = false;
         Integer suggestCancelOrderId = null;
+        // Whatever the most recent get_delivery_quote call in this turn asked
+        // about -- carried along so suggest_create_order's shortcut can hand
+        // the order form a head start instead of always starting blank (the
+        // user already said this once; don't make them repeat it).
+        String suggestedDestination = null;
+        Double suggestedWeightLbs = null;
 
         for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
             JsonNode responseMessage = openAiClient.createCompletion(messages, TOOLS).at("/choices/0/message");
@@ -240,7 +305,9 @@ public class ChatService {
             if (toolCalls == null || !toolCalls.isArray() || toolCalls.isEmpty()) {
                 JsonNode content = responseMessage.get("content");
                 String text = content == null || content.isNull() ? "" : content.asString();
-                return new ChatOutcome(text, suggestCreateOrder, offerHumanHelp, suggestCancelOrderId);
+                return new ChatOutcome(
+                        text, suggestCreateOrder, offerHumanHelp, suggestCancelOrderId,
+                        suggestedDestination, suggestedWeightLbs);
             }
 
             messages.add(objectMapper.convertValue(responseMessage, new TypeReference<Map<String, Object>>() {}));
@@ -248,10 +315,31 @@ public class ChatService {
                 String calledTool = toolCall.at("/function/name").asString();
                 if ("suggest_create_order".equals(calledTool)) {
                     suggestCreateOrder = true;
+                    // Prefer whatever this call itself was given (the model's most
+                    // direct signal of "here's what they told me") over an earlier
+                    // get_delivery_quote in the same turn -- only fall back to
+                    // that if this call didn't carry its own destination/weight.
+                    JsonNode createArgs = extractQuoteArgs(toolCall);
+                    if (createArgs != null) {
+                        String rawDestination = createArgs.path("destination").asString(null);
+                        if (rawDestination != null) suggestedDestination = normalizeDestination(rawDestination);
+                        if (createArgs.has("packageWeightLbs")) {
+                            suggestedWeightLbs = createArgs.get("packageWeightLbs").asDouble();
+                        }
+                    }
                 } else if ("flag_frustrated_user".equals(calledTool)) {
                     offerHumanHelp = true;
                 } else if ("suggest_cancel_order".equals(calledTool)) {
                     suggestCancelOrderId = extractOrderId(toolCall);
+                } else if ("get_delivery_quote".equals(calledTool)) {
+                    JsonNode quoteArgs = extractQuoteArgs(toolCall);
+                    if (quoteArgs != null) {
+                        String rawDestination = quoteArgs.path("destination").asString(null);
+                        suggestedDestination = rawDestination == null ? null : normalizeDestination(rawDestination);
+                        if (quoteArgs.has("packageWeightLbs")) {
+                            suggestedWeightLbs = quoteArgs.get("packageWeightLbs").asDouble();
+                        }
+                    }
                 }
                 messages.add(runTool(userId, toolCall));
             }
@@ -269,7 +357,7 @@ public class ChatService {
         try {
             result = switch (name) {
                 case "get_order" -> getOrder(userId, argumentsJson);
-                case "list_orders" -> objectMapper.writeValueAsString(orderService.listOrder(userId));
+                case "list_orders" -> listOrdersDetailed(userId);
                 case "get_delivery_quote" -> getDeliveryQuote(argumentsJson);
                 case "suggest_create_order", "flag_frustrated_user", "suggest_cancel_order" -> "{\"ok\":true}";
                 default -> "{\"error\":\"Unknown tool.\"}";
@@ -292,6 +380,21 @@ public class ChatService {
         return toolMessage;
     }
 
+    // Includes full details (destination, createdAt, etc.) for every order, not
+    // just ids -- so the model can search by what the user actually remembers
+    // (destination, roughly when they sent it) instead of needing an id up
+    // front, all from this one call rather than a get_order round trip per
+    // order. This is a chat-only shape; it doesn't touch OrderListResponse
+    // (the real GET /order contract other consumers rely on).
+    private String listOrdersDetailed(int userId) throws Exception {
+        var ids = orderService.listOrder(userId);
+        var active = new ArrayList<>();
+        for (var entry : ids.active()) active.add(orderService.getOrder(userId, entry.orderId()));
+        var completed = new ArrayList<>();
+        for (var entry : ids.completed()) completed.add(orderService.getOrder(userId, entry.orderId()));
+        return objectMapper.writeValueAsString(Map.of("active", active, "completed", completed));
+    }
+
     private String getOrder(int userId, String argumentsJson) throws Exception {
         JsonNode args = objectMapper.readTree(argumentsJson);
         int orderId = args.get("orderId").asInt();
@@ -311,12 +414,34 @@ public class ChatService {
         }
     }
 
+    private JsonNode extractQuoteArgs(JsonNode toolCall) {
+        try {
+            return objectMapper.readTree(toolCall.at("/function/arguments").asString("{}"));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private String getDeliveryQuote(String argumentsJson) throws Exception {
         JsonNode args = objectMapper.readTree(argumentsJson);
         String destination = args.get("destination").asString();
         double packageWeightLbs = args.get("packageWeightLbs").asDouble();
         return objectMapper.writeValueAsString(
-                deliveryService.getDeliveryOptions(destination, packageWeightLbs));
+                deliveryService.getDeliveryOptions(normalizeDestination(destination), packageWeightLbs));
+    }
+
+    // The model is told (in the tool description) to include a city, but a bare
+    // street address like "88 Mission Street" still gets through sometimes --
+    // Google's geocoder then has to guess a city, and can guess wrong (any US
+    // city with a similarly-named street), making a real in-range SF address
+    // come back "outside the delivery radius". Every station is in San
+    // Francisco (see SYSTEM_PROMPT), so it's always correct to fill that in
+    // ourselves rather than trust the model got it every time.
+    private String normalizeDestination(String destination) {
+        if (destination == null || destination.toLowerCase(Locale.ROOT).contains("san francisco")) {
+            return destination;
+        }
+        return destination + ", San Francisco, CA";
     }
 
     private static Map<String, Object> message(String role, String content) {
@@ -352,6 +477,11 @@ public class ChatService {
             String text,
             boolean suggestCreateOrder,
             boolean offerHumanHelp,
-            Integer suggestCancelOrderId
+            Integer suggestCancelOrderId,
+            // Nullable -- only set if get_delivery_quote was called this turn.
+            // Lets the frontend hand these off to the order form when the
+            // user follows suggestCreateOrder, instead of starting blank.
+            String suggestedDestination,
+            Double suggestedWeightLbs
     ) {}
 }
