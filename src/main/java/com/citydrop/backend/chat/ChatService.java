@@ -73,20 +73,20 @@ public class ChatService {
               an order is QUEUED, you can say it's waiting for a vehicle, \
               but there's no way to know its position in line or how long \
               that will take -- never guess a wait time for a QUEUED order.
-            - Order status is usually PENDING_DROPOFF -> AT_STATION -> \
-              BEFORE_HALF_WAY -> HALF_WAY -> MORE_THAN_HALF_WAY -> DELIVERED. \
-              An order can also be QUEUED (waiting for a vehicle, before \
-              PENDING_DROPOFF) or CANCELLED (at any point before DELIVERED). \
-              A vehicle isn't claimed at order time -- PENDING_DROPOFF just \
-              means the order is placed; the package hasn't reached the \
-              station yet, so no clock has started.
+            - Order status is usually PENDING_DROPOFF -> BEFORE_HALF_WAY -> \
+              HALF_WAY -> MORE_THAN_HALF_WAY -> DELIVERED. An order can also \
+              be QUEUED (waiting for a vehicle after the package has been \
+              dropped off with none free) or CANCELLED (at any point before \
+              DELIVERED). A vehicle isn't claimed at order time -- \
+              PENDING_DROPOFF just means the order is placed; the package \
+              hasn't reached the station yet, so no clock has started.
             - This "never guess a wait time" restriction is ONLY about a \
               QUEUED order's position in line -- it does NOT apply to \
               get_order's own `time` field. That field is the real, already- \
               computed delivery duration in minutes (counted from drop-off) \
               for that specific order's vehicle+distance, not a guess -- once \
-              an order is AT_STATION or later (i.e. has actually been dropped \
-              off and picked up), share it plainly when asked how long it \
+              an order is BEFORE_HALF_WAY or later (i.e. has actually been \
+              dropped off and picked up), share it plainly when asked how long it \
               will take or when it'll arrive. For PENDING_DROPOFF, say it \
               hasn't been dropped off yet so the clock hasn't started, but \
               you can still mention `time` as how long it'll take once it is.

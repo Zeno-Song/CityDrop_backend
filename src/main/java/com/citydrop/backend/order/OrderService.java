@@ -46,8 +46,9 @@ public class OrderService {
                 )
                 .orElseThrow(QuoteExpiredException::new);
 
-        // Feature 2: reserve-or-queue replaces the old decrement / rows==0 -> 409 block.
-        // queueIfUnavailable == false/omitted keeps the original immediate-failure behavior.
+        // Feature 2: submission always succeeds as PENDING_DROPOFF -- it's just a commitment, not
+        // a vehicle claim. queueIfUnavailable is persisted on the order and only consulted later,
+        // at drop-off, if no vehicle turns out to be idle then.
         OrderEntity savedOrder = orderQueueService.reserveVehicleOrQueue(
                 userId, selectedQuote, order.queueIfUnavailable());
 
@@ -73,7 +74,8 @@ public class OrderService {
     }
 
     // A vehicle is claimed here, not at submitOrder -- see OrderQueueService.claimVehicleAtDropoff.
-    // Returns AT_STATION if one was idle, or QUEUED if the package arrived with none free.
+    // Returns BEFORE_HALF_WAY if one was idle, QUEUED if the package arrived with none free and
+    // the order opted into queueIfUnavailable, or throws VehicleUnavailableException otherwise.
     public String dropOff(int userId, int orderId) {
         OrderEntity order = getOrderEntity(userId, orderId); // 404 if missing
         if (!order.status().equals(OrderStatus.PENDING_DROPOFF.name())) {
@@ -104,7 +106,7 @@ public class OrderService {
             if (orderRepository.updateStatus(orderId, order.status(), OrderStatus.CANCELLED.name()) == 1) {
                 // PENDING_DROPOFF is just a commitment to show up -- it never claimed a vehicle
                 // (see OrderQueueService.claimVehicleAtDropoff), so there's nothing to release.
-                // Everything past that (AT_STATION onward) does hold one.
+                // Everything past that (BEFORE_HALF_WAY onward) does hold one.
                 if (!order.status().equals(OrderStatus.PENDING_DROPOFF.name())) {
                     orderQueueService.handleVehicleAvailable(order.stationId(), order.vehicle());
                 }
@@ -134,7 +136,8 @@ public class OrderService {
                 newStatus,
                 order.createdAt(),
                 order.droppedOffAt(),
-                order.refundEligible()
+                order.refundEligible(),
+                order.queueIfUnavailable()
         );
     }
 

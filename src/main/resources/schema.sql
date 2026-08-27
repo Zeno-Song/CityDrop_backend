@@ -37,11 +37,12 @@ CREATE TABLE orders (
                         vehicle            VARCHAR(20) NOT NULL CHECK (vehicle IN ('ROBOT', 'DRONE')),
                         station_id         INTEGER NOT NULL REFERENCES stations (station_id),
                         status             VARCHAR(30) NOT NULL DEFAULT 'PENDING_DROPOFF'
-                            CHECK (status IN ('PENDING_DROPOFF', 'AT_STATION', 'BEFORE_HALF_WAY',
+                            CHECK (status IN ('PENDING_DROPOFF', 'BEFORE_HALF_WAY',
                                               'HALF_WAY', 'MORE_THAN_HALF_WAY', 'DELIVERED', 'CANCELLED', 'QUEUED')),
                         created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
                         dropped_off_at      TIMESTAMPTZ,
-                        refund_eligible     BOOLEAN NOT NULL DEFAULT TRUE
+                        refund_eligible     BOOLEAN NOT NULL DEFAULT TRUE,
+                        queue_if_unavailable BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Feature 2: partial index for FIFO queue-head lookup (findOldestQueuedForUpdate).
