@@ -6,5 +6,10 @@ public record DeliveryQuote(
         String vehicle,
         double price,
         double time,
-        int stationId
+        int stationId,
+        // Best-effort snapshot of the station's vehicle count at quote time --
+        // not reserved, so it can still change by the time the user submits
+        // (submitOrder re-checks stock for real). Lets the UI show "Sold out"
+        // up front instead of only discovering it on submission.
+        boolean available
 ) {}

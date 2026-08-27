@@ -119,7 +119,7 @@ class ChatServiceTest {
                 .thenReturn(completionWithText("A robot delivery there would be $5.11."));
         when(deliveryService.getDeliveryOptions("1398 Valencia St, San Francisco, CA", 5.0))
                 .thenReturn(List.of(new DeliveryQuote(
-                        "1398 Valencia St, San Francisco, CA", 5.0, "ROBOT", 5.11, 18.3, 1)));
+                        "1398 Valencia St, San Francisco, CA", 5.0, "ROBOT", 5.11, 18.3, 1, true)));
 
         ChatService chatService = new ChatService(openAiClient, orderService, deliveryService, objectMapper);
         ChatService.ChatOutcome outcome = chatService.reply(7, "how much to send 5 lbs to 1398 Valencia St?", null);

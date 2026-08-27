@@ -18,5 +18,6 @@ public record OrderEntity(
         String status,
         OffsetDateTime createdAt,
         OffsetDateTime droppedOffAt,
-        boolean refundEligible
+        boolean refundEligible,
+        boolean queueIfUnavailable
 ) {}

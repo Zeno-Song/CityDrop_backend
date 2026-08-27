@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -64,8 +65,14 @@ public class DeliveryService {
     ) {
         double[] dest = geocodeCache.getOrLoad(destinationAddress, () -> geocode(destinationAddress));
 
+        List<StationEntity> stations = new ArrayList<>();
+        stationRepository.findAll().forEach(stations::add);
+        // findAll() makes no ordering guarantee -- without this the UI's station
+        // cards would shuffle between requests instead of staying in a stable order.
+        stations.sort(Comparator.comparingInt(StationEntity::stationId));
+
         List<DeliveryQuote> quotes = new ArrayList<>();
-        for (StationEntity station : stationRepository.findAll()) {
+        for (StationEntity station : stations) {
             double distanceToStationMiles = deliveryAlgorithm.computeDistanceMiles(
                     station.coordX(), station.coordY(), dest[0], dest[1]);
             if (distanceToStationMiles > station.radius()) {
@@ -77,8 +84,10 @@ public class DeliveryService {
                         () -> deliveryAlgorithm.computeTime(station, dest[0], dest[1], vehicle.name())
                 );
                 double price = deliveryAlgorithm.computeCost(packageWeightLbs, vehicle.name());
+                boolean available = (vehicle == VehicleType.ROBOT ? station.robotCount() : station.droneCount()) > 0;
                 quotes.add(new DeliveryQuote(
-                        destinationAddress, packageWeightLbs, vehicle.name(), price, time, station.stationId()));
+                        destinationAddress, packageWeightLbs, vehicle.name(), price, time, station.stationId(),
+                        available));
             }
         }
 

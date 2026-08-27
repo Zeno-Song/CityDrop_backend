@@ -65,10 +65,6 @@ public class Scheduler {
             return false; // moved by something else mid-tick (e.g. a cancellation) — not an error
         }
 
-        if (target == OrderStatus.BEFORE_HALF_WAY) {
-            orderRepository.clearRefundEligibility(order.orderId());
-        }
-
         if (target == OrderStatus.DELIVERED) {
             orderQueueService.handleVehicleAvailable(order.stationId(), order.vehicle());
         }

@@ -37,8 +37,9 @@ public interface OrderRepository
     @Modifying
     @Query("""
     UPDATE orders
-    SET status = 'AT_STATION',
-        dropped_off_at = :now
+    SET status = 'BEFORE_HALF_WAY',
+        dropped_off_at = :now,
+        refund_eligible = false
     WHERE order_id = :orderId
       AND status = 'PENDING_DROPOFF'
     """)
@@ -47,34 +48,32 @@ public interface OrderRepository
             @Param("now") OffsetDateTime now
     );
 
-    @Query("""
-    SELECT * FROM orders
-    WHERE dropped_off_at IS NOT NULL
-      AND status IN ('AT_STATION', 'BEFORE_HALF_WAY', 'HALF_WAY', 'MORE_THAN_HALF_WAY')
-    """)
-    List<OrderEntity> findEligibleForStatusAdvancement();
-
+    // Feature 2 - a vehicle isn't claimed at order time anymore (see
+    // OrderQueueService.claimVehicleAtDropoff); if none is idle when the
+    // package physically arrives and the order opted into queueIfUnavailable,
+    // it joins the queue right then instead of moving to BEFORE_HALF_WAY.
+    // dropped_off_at is still recorded here so it's not re-counted as
+    // eligible for the scheduler until it's actually assigned a vehicle
+    // (see assignQueuedOrderAtStation).
     @Modifying
     @Query("""
     UPDATE orders
-    SET refund_eligible = false
+    SET status = 'QUEUED',
+        dropped_off_at = :now
     WHERE order_id = :orderId
+      AND status = 'PENDING_DROPOFF'
     """)
-    void clearRefundEligibility(@Param("orderId") int orderId);
-    // Feature 2 - no-bypass: block a new order from grabbing a vehicle while any QUEUED order
-    // exists for the same station + vehicle.
-    @Query("""
-        SELECT EXISTS (
-            SELECT 1 FROM orders
-            WHERE station_id = :stationId
-              AND vehicle = :vehicle
-              AND status = 'QUEUED'
-        )
-        """)
-    boolean existsQueuedOrder(
-            @Param("stationId") int stationId,
-            @Param("vehicle") String vehicle
+    int markQueuedAtDropoff(
+            @Param("orderId") int orderId,
+            @Param("now") OffsetDateTime now
     );
+
+    @Query("""
+    SELECT * FROM orders
+    WHERE dropped_off_at IS NOT NULL
+      AND status IN ('BEFORE_HALF_WAY', 'HALF_WAY', 'MORE_THAN_HALF_WAY')
+    """)
+    List<OrderEntity> findEligibleForStatusAdvancement();
 
     // Feature 2 - FIFO queue head, locked. Ordered by order_id (auto-increment), NOT created_at.
     @Query("""
@@ -91,14 +90,23 @@ public interface OrderRepository
             @Param("vehicle") String vehicle
     );
 
-    // Feature 2 - CAS: QUEUED -> PENDING_DROPOFF. rows == 0 means the head was cancelled
+    // Feature 2 - CAS: QUEUED -> BEFORE_HALF_WAY, for a queued order whose package was already
+    // dropped off (droppedOffAt already set before this call -- see claimVehicleAtDropoff/
+    // markQueuedAtDropoff; a QUEUED order can no longer exist any other way). Refreshes
+    // dropped_off_at to now so the delivery clock starts from actually getting a vehicle, not from
+    // whenever it happened to arrive while waiting. rows == 0 means the head was cancelled
     // concurrently; caller should try the next one.
     @Modifying
     @Query("""
         UPDATE orders
-        SET status = 'PENDING_DROPOFF'
+        SET status = 'BEFORE_HALF_WAY',
+            dropped_off_at = :now,
+            refund_eligible = false
         WHERE order_id = :orderId
           AND status = 'QUEUED'
         """)
-    int assignQueuedOrder(@Param("orderId") int orderId);
+    int assignQueuedOrderAtStation(
+            @Param("orderId") int orderId,
+            @Param("now") OffsetDateTime now
+    );
 }

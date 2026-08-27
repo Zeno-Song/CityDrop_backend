@@ -4,5 +4,7 @@ public record ChatResponse(
         String reply,
         boolean suggestCreateOrder,
         boolean offerHumanHelp,
-        Integer suggestCancelOrderId
+        Integer suggestCancelOrderId,
+        String suggestedDestination,
+        Double suggestedWeightLbs
 ) {}

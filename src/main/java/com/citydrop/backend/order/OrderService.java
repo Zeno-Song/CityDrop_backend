@@ -15,9 +15,6 @@ import com.citydrop.backend.models.requests.SubmissionObject;
 import com.citydrop.backend.models.responses.DeliveryQuote;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-
 import java.util.List;
 
 @Service
@@ -49,8 +46,9 @@ public class OrderService {
                 )
                 .orElseThrow(QuoteExpiredException::new);
 
-        // Feature 2: reserve-or-queue replaces the old decrement / rows==0 -> 409 block.
-        // queueIfUnavailable == false/omitted keeps the original immediate-failure behavior.
+        // Feature 2: submission always succeeds as PENDING_DROPOFF -- it's just a commitment, not
+        // a vehicle claim. queueIfUnavailable is persisted on the order and only consulted later,
+        // at drop-off, if no vehicle turns out to be idle then.
         OrderEntity savedOrder = orderQueueService.reserveVehicleOrQueue(
                 userId, selectedQuote, order.queueIfUnavailable());
 
@@ -75,13 +73,15 @@ public class OrderService {
         return new OrderListResponse(active, completed);
     }
 
+    // A vehicle is claimed here, not at submitOrder -- see OrderQueueService.claimVehicleAtDropoff.
+    // Returns BEFORE_HALF_WAY if one was idle, QUEUED if the package arrived with none free and
+    // the order opted into queueIfUnavailable, or throws VehicleUnavailableException otherwise.
     public String dropOff(int userId, int orderId) {
         OrderEntity order = getOrderEntity(userId, orderId); // 404 if missing
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        if (orderRepository.markDroppedOff(orderId, now) == 0) {
+        if (!order.status().equals(OrderStatus.PENDING_DROPOFF.name())) {
             throw new InvalidOrderStatusException(order.status()); // 409, already past PENDING_DROPOFF
         }
-        return OrderStatus.AT_STATION.name();
+        return orderQueueService.claimVehicleAtDropoff(order);
     }
 
     @Transactional
@@ -104,7 +104,12 @@ public class OrderService {
             }
 
             if (orderRepository.updateStatus(orderId, order.status(), OrderStatus.CANCELLED.name()) == 1) {
-                orderQueueService.handleVehicleAvailable(order.stationId(), order.vehicle());
+                // PENDING_DROPOFF is just a commitment to show up -- it never claimed a vehicle
+                // (see OrderQueueService.claimVehicleAtDropoff), so there's nothing to release.
+                // Everything past that (BEFORE_HALF_WAY onward) does hold one.
+                if (!order.status().equals(OrderStatus.PENDING_DROPOFF.name())) {
+                    orderQueueService.handleVehicleAvailable(order.stationId(), order.vehicle());
+                }
                 return toCancelResponse(withStatus(order, OrderStatus.CANCELLED.name()));
             }
             // row changed between the read and this write (e.g. scheduler advanced it) - re-fetch and re-evaluate
@@ -131,7 +136,8 @@ public class OrderService {
                 newStatus,
                 order.createdAt(),
                 order.droppedOffAt(),
-                order.refundEligible()
+                order.refundEligible(),
+                order.queueIfUnavailable()
         );
     }
 

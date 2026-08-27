@@ -33,7 +33,8 @@ public class ChatController {
         UserEntity user = userService.findByUsername(principal.getName());
         ChatService.ChatOutcome outcome = chatService.reply(user.id(), request.message(), request.history());
         return new ChatResponse(
-                outcome.text(), outcome.suggestCreateOrder(), outcome.offerHumanHelp(), outcome.suggestCancelOrderId());
+                outcome.text(), outcome.suggestCreateOrder(), outcome.offerHumanHelp(), outcome.suggestCancelOrderId(),
+                outcome.suggestedDestination(), outcome.suggestedWeightLbs());
     }
 
     // Feature 4, voice (ASR): a stateless proxy to OpenAI's transcription API

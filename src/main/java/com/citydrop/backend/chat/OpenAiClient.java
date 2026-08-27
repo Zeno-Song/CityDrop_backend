@@ -31,7 +31,17 @@ class OpenAiClient {
     private static final URI ENDPOINT = URI.create("https://api.openai.com/v1/chat/completions");
     private static final URI TRANSCRIPTION_ENDPOINT = URI.create("https://api.openai.com/v1/audio/transcriptions");
     private static final URI SPEECH_ENDPOINT = URI.create("https://api.openai.com/v1/audio/speech");
-    private static final String TRANSCRIBE_MODEL = "whisper-1";
+    // gpt-4o-mini-transcribe supersedes whisper-1 -- OpenAI reports notably
+    // better accuracy on accents and noisy/short clips, at a comparable price.
+    private static final String TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
+    // Biases the transcription toward this app's actual vocabulary (short
+    // customer-support utterances about orders, not generic dictation) --
+    // cuts down on the model latching onto an unrelated, more "common" phrase
+    // for a short or accented clip it isn't fully sure about.
+    private static final String TRANSCRIBE_PROMPT =
+            "Customer support voice message for CityDrop, a package delivery app. "
+                    + "Topics: order status, cancel an order, package weight in pounds, "
+                    + "delivery addresses in San Francisco, robot or drone delivery.";
     private static final String TTS_MODEL = "tts-1";
     private static final String TTS_VOICE = "alloy";
 
@@ -166,6 +176,10 @@ class OpenAiClient {
             out.write(("--" + boundary + CRLF).getBytes(StandardCharsets.UTF_8));
             out.write(("Content-Disposition: form-data; name=\"model\"" + CRLF + CRLF).getBytes(StandardCharsets.UTF_8));
             out.write((TRANSCRIBE_MODEL + CRLF).getBytes(StandardCharsets.UTF_8));
+
+            out.write(("--" + boundary + CRLF).getBytes(StandardCharsets.UTF_8));
+            out.write(("Content-Disposition: form-data; name=\"prompt\"" + CRLF + CRLF).getBytes(StandardCharsets.UTF_8));
+            out.write((TRANSCRIBE_PROMPT + CRLF).getBytes(StandardCharsets.UTF_8));
 
             out.write(("--" + boundary + CRLF).getBytes(StandardCharsets.UTF_8));
             out.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + "\"" + CRLF)

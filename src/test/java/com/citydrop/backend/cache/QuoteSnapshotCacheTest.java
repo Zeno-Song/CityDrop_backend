@@ -109,7 +109,8 @@ class QuoteSnapshotCacheTest {
                 "ROBOT",
                 12.50,
                 18.0,
-                3
+                3,
+                true
         );
     }
 }
