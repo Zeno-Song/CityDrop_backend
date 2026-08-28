@@ -1,5 +1,6 @@
 package com.citydrop.backend.cache;
 
+import com.citydrop.backend.cache.QuoteSnapshot.TimedQuote;
 import com.citydrop.backend.models.responses.DeliveryQuote;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -43,52 +45,78 @@ class QuoteSnapshotCacheTest {
     }
 
     @Test
-    void putStoresTheQuoteSnapshotWithTheConfiguredTtl() {
-        DeliveryQuote quote = quote();
+    void putStoresTheQuoteWithTheConfiguredTtl() {
+        DeliveryQuote quote = quote(3, "ROBOT");
+        when(valueOperations.get("quoteSnapshot:42")).thenReturn(null); // nothing cached yet
         when(objectMapper.writeValueAsString(any())).thenReturn("snapshot-json");
 
         cache.put(42, List.of(quote));
 
         ArgumentCaptor<QuoteSnapshot> snapshotCaptor = ArgumentCaptor.forClass(QuoteSnapshot.class);
         verify(objectMapper).writeValueAsString(snapshotCaptor.capture());
-        verify(valueOperations).set(
-                "quoteSnapshot:42",
-                "snapshot-json",
-                Duration.ofMinutes(5)
-        );
+        verify(valueOperations).set("quoteSnapshot:42", "snapshot-json", Duration.ofMinutes(5));
 
         QuoteSnapshot stored = snapshotCaptor.getValue();
         assertEquals(42, stored.userId());
-        assertEquals(List.of(quote), stored.quotes());
-        assertEquals(Duration.ofMinutes(5), Duration.between(stored.createdAt(), stored.expiresAt()));
+        assertEquals(1, stored.quotes().size());
+        assertEquals(quote, stored.quotes().get(0).quote());
     }
 
     @Test
-    void getEvictsAnExpiredSnapshot() {
-        QuoteSnapshot expired = new QuoteSnapshot(
-                42,
-                Instant.now().minus(Duration.ofMinutes(10)),
-                Instant.now().minus(Duration.ofMinutes(5)),
-                List.of(quote())
-        );
+    void putMergesANewFetchWithAnUnexpiredEarlierOneForADifferentDestination() {
+        // Simulates: user fetched a quote for station 3 (still within its lock window),
+        // then fetched a different destination that only returns a quote for station 7.
+        // The station-3 quote must survive instead of being clobbered.
+        DeliveryQuote stationThreeQuote = quote(3, "ROBOT");
+        TimedQuote existingEntry = new TimedQuote(stationThreeQuote, Instant.now().plus(Duration.ofMinutes(3)));
+        when(valueOperations.get("quoteSnapshot:42")).thenReturn("existing-json");
+        when(objectMapper.readValue("existing-json", QuoteSnapshot.class))
+                .thenReturn(new QuoteSnapshot(42, List.of(existingEntry)));
+        when(objectMapper.writeValueAsString(any())).thenReturn("merged-json");
+
+        DeliveryQuote stationSevenQuote = quote(7, "DRONE");
+        cache.put(42, List.of(stationSevenQuote));
+
+        ArgumentCaptor<QuoteSnapshot> snapshotCaptor = ArgumentCaptor.forClass(QuoteSnapshot.class);
+        verify(objectMapper).writeValueAsString(snapshotCaptor.capture());
+        List<DeliveryQuote> mergedQuotes = snapshotCaptor.getValue().quotes().stream()
+                .map(TimedQuote::quote).toList();
+        assertTrue(mergedQuotes.contains(stationThreeQuote), "earlier unexpired quote should survive the merge");
+        assertTrue(mergedQuotes.contains(stationSevenQuote), "newly fetched quote should be included");
+    }
+
+    @Test
+    void putDropsAnExpiredEarlierEntryInsteadOfKeepingItForever() {
+        TimedQuote expiredEntry = new TimedQuote(quote(3, "ROBOT"), Instant.now().minus(Duration.ofSeconds(1)));
+        when(valueOperations.get("quoteSnapshot:42")).thenReturn("existing-json");
+        when(objectMapper.readValue("existing-json", QuoteSnapshot.class))
+                .thenReturn(new QuoteSnapshot(42, List.of(expiredEntry)));
+        when(objectMapper.writeValueAsString(any())).thenReturn("merged-json");
+
+        cache.put(42, List.of(quote(7, "DRONE")));
+
+        ArgumentCaptor<QuoteSnapshot> snapshotCaptor = ArgumentCaptor.forClass(QuoteSnapshot.class);
+        verify(objectMapper).writeValueAsString(snapshotCaptor.capture());
+        assertEquals(1, snapshotCaptor.getValue().quotes().size());
+    }
+
+    @Test
+    void findMatchingIgnoresAnExpiredEntry() {
+        TimedQuote expiredEntry = new TimedQuote(quote(3, "ROBOT"), Instant.now().minus(Duration.ofSeconds(1)));
         when(valueOperations.get("quoteSnapshot:42")).thenReturn("expired-json");
-        when(objectMapper.readValue("expired-json", QuoteSnapshot.class)).thenReturn(expired);
+        when(objectMapper.readValue("expired-json", QuoteSnapshot.class))
+                .thenReturn(new QuoteSnapshot(42, List.of(expiredEntry)));
 
         assertNull(cache.get(42));
-        verify(redisTemplate).delete("quoteSnapshot:42");
     }
 
     @Test
     void findMatchingUsesTheLockedQuoteValues() {
-        DeliveryQuote quote = quote();
-        QuoteSnapshot active = new QuoteSnapshot(
-                42,
-                Instant.now(),
-                Instant.now().plus(Duration.ofMinutes(5)),
-                List.of(quote)
-        );
+        DeliveryQuote quote = quote(3, "ROBOT");
+        TimedQuote activeEntry = new TimedQuote(quote, Instant.now().plus(Duration.ofMinutes(5)));
         when(valueOperations.get("quoteSnapshot:42")).thenReturn("active-json");
-        when(objectMapper.readValue("active-json", QuoteSnapshot.class)).thenReturn(active);
+        when(objectMapper.readValue("active-json", QuoteSnapshot.class))
+                .thenReturn(new QuoteSnapshot(42, List.of(activeEntry)));
 
         Optional<DeliveryQuote> result = cache.findMatching(
                 42,
@@ -102,14 +130,39 @@ class QuoteSnapshotCacheTest {
         assertEquals(quote, result.get());
     }
 
-    private DeliveryQuote quote() {
+    @Test
+    void getThrowsWhenRedisReadFails() {
+        when(valueOperations.get("quoteSnapshot:42")).thenThrow(new RuntimeException("connection refused"));
+
+        assertThrows(QuoteCacheUnavailableException.class, () -> cache.get(42));
+    }
+
+    @Test
+    void findMatchingThrowsRatherThanLookingLikeAnExpiredQuoteWhenRedisIsDown() {
+        when(valueOperations.get("quoteSnapshot:42")).thenThrow(new RuntimeException("connection refused"));
+
+        assertThrows(QuoteCacheUnavailableException.class,
+                () -> cache.findMatching(42, "1 Main St, San Francisco", 4.0, 3, "ROBOT"));
+    }
+
+    @Test
+    void putThrowsWhenRedisWriteFails() {
+        when(valueOperations.get("quoteSnapshot:42")).thenReturn(null);
+        when(objectMapper.writeValueAsString(any())).thenReturn("snapshot-json");
+        org.mockito.Mockito.doThrow(new RuntimeException("connection refused"))
+                .when(valueOperations).set("quoteSnapshot:42", "snapshot-json", Duration.ofMinutes(5));
+
+        assertThrows(QuoteCacheUnavailableException.class, () -> cache.put(42, List.of(quote(3, "ROBOT"))));
+    }
+
+    private DeliveryQuote quote(int stationId, String vehicle) {
         return new DeliveryQuote(
                 "1 Main St, San Francisco",
                 4.0,
-                "ROBOT",
+                vehicle,
                 12.50,
                 18.0,
-                3,
+                stationId,
                 true
         );
     }

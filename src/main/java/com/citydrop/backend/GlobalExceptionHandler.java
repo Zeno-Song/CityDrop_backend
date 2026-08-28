@@ -1,5 +1,6 @@
 package com.citydrop.backend;
 
+import com.citydrop.backend.cache.QuoteCacheUnavailableException;
 import com.citydrop.backend.chat.ChatUnavailableException;
 import com.citydrop.backend.deliveryOption.AddressCannotBeGeocodedException;
 import com.citydrop.backend.deliveryOption.AddressOutOfRangeException;
@@ -35,6 +36,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(QuoteExpiredException.class)
     public ResponseEntity<ErrorResponse> handleQuoteExpiredException(QuoteExpiredException ex) {
         return ResponseEntity.status(HttpStatus.GONE).body(new ErrorResponse(ex.getMessage()));
+    }
+
+    @ExceptionHandler(QuoteCacheUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleQuoteCacheUnavailableException(QuoteCacheUnavailableException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse("Quote service is temporarily unavailable."));
     }
 
     @ExceptionHandler(OrderNotFoundException.class)

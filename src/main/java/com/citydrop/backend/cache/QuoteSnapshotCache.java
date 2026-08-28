@@ -1,5 +1,6 @@
 package com.citydrop.backend.cache;
 
+import com.citydrop.backend.cache.QuoteSnapshot.TimedQuote;
 import com.citydrop.backend.models.responses.DeliveryQuote;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,8 +9,10 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -33,15 +36,30 @@ public class QuoteSnapshotCache {
         this.cacheProperties = cacheProperties;
     }
 
+    // Merges freshly computed quotes into whatever this user already has locked in,
+    // instead of replacing the entry outright -- a re-fetch for a different destination
+    // (a second tab, comparing addresses, editing the form) used to silently evict an
+    // earlier, still-valid quote and make it unsubmittable with a misleading
+    // QuoteExpiredException. Each quote gets its own expiry, so an old entry that's
+    // still within its lock window survives a newer, unrelated fetch; a re-fetch of the
+    // SAME (station, vehicle, destination, weight) replaces just that entry with the
+    // fresher price rather than piling up duplicates.
     public void put(int userId, List<DeliveryQuote> quotes) {
-        Instant createdAt = Instant.now();
-        QuoteSnapshot snapshot = new QuoteSnapshot(
-                userId,
-                createdAt,
-                createdAt.plus(cacheProperties.quoteLockTtl()),
-                List.copyOf(quotes)
-        );
         String key = CacheKeyUtils.quoteSnapshotKey(userId);
+        Instant now = Instant.now();
+        Instant expiresAt = now.plus(cacheProperties.quoteLockTtl());
+
+        Map<String, TimedQuote> merged = new LinkedHashMap<>();
+        for (TimedQuote existing : readEntries(key)) {
+            if (existing.expiresAt().isAfter(now)) {
+                merged.put(identity(existing.quote()), existing);
+            }
+        }
+        for (DeliveryQuote quote : quotes) {
+            merged.put(identity(quote), new TimedQuote(quote, expiresAt));
+        }
+
+        QuoteSnapshot snapshot = new QuoteSnapshot(userId, List.copyOf(merged.values()));
         try {
             redisTemplate.opsForValue().set(
                     key,
@@ -50,26 +68,16 @@ public class QuoteSnapshotCache {
             );
         } catch (RuntimeException e) {
             log.warn("Failed to write quote snapshot cache for key '{}': {}", key, e.getMessage());
+            throw new QuoteCacheUnavailableException("Failed to write quote snapshot cache for key '" + key + "'", e);
         }
     }
 
     public QuoteSnapshot get(int userId) {
-        String key = CacheKeyUtils.quoteSnapshotKey(userId);
-        try {
-            String cached = redisTemplate.opsForValue().get(key);
-            if (cached == null) {
-                return null;
-            }
-            QuoteSnapshot snapshot = objectMapper.readValue(cached, QuoteSnapshot.class);
-            if (!snapshot.expiresAt().isAfter(Instant.now())) {
-                evict(userId);
-                return null;
-            }
-            return snapshot;
-        } catch (RuntimeException e) {
-            log.warn("Failed to read quote snapshot cache for key '{}': {}", key, e.getMessage());
-            return null;
-        }
+        Instant now = Instant.now();
+        List<TimedQuote> active = readEntries(CacheKeyUtils.quoteSnapshotKey(userId)).stream()
+                .filter(t -> t.expiresAt().isAfter(now))
+                .toList();
+        return active.isEmpty() ? null : new QuoteSnapshot(userId, active);
     }
 
     public Optional<DeliveryQuote> findMatching(
@@ -85,6 +93,7 @@ public class QuoteSnapshotCache {
         }
 
         return snapshot.quotes().stream()
+                .map(TimedQuote::quote)
                 .filter(quote -> quote.stationId() == stationId)
                 .filter(quote -> quote.vehicle().equalsIgnoreCase(vehicle))
                 .filter(quote -> sameDestination(quote.destination(), destination))
@@ -99,6 +108,34 @@ public class QuoteSnapshotCache {
         } catch (RuntimeException e) {
             log.warn("Failed to evict quote snapshot cache for key '{}': {}", key, e.getMessage());
         }
+    }
+
+    private List<TimedQuote> readEntries(String key) {
+        String cached;
+        try {
+            cached = redisTemplate.opsForValue().get(key);
+        } catch (RuntimeException e) {
+            log.warn("Failed to read quote snapshot cache for key '{}': {}", key, e.getMessage());
+            throw new QuoteCacheUnavailableException("Failed to read quote snapshot cache for key '" + key + "'", e);
+        }
+        if (cached == null) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(cached, QuoteSnapshot.class).quotes();
+        } catch (RuntimeException e) {
+            log.warn("Failed to parse quote snapshot cache for key '{}': {}", key, e.getMessage());
+            throw new QuoteCacheUnavailableException("Failed to parse quote snapshot cache for key '" + key + "'", e);
+        }
+    }
+
+    // Identifies "the same quote slot" across fetches -- a re-fetch that returns a quote
+    // for this exact combination replaces the old one instead of coexisting with it, so
+    // findMatching always prefers the freshest price for a repeated ask.
+    private String identity(DeliveryQuote quote) {
+        return quote.stationId() + "|" + quote.vehicle().toUpperCase(Locale.ROOT)
+                + "|" + normalizeDestination(quote.destination())
+                + "|" + quote.packageWeightLbs();
     }
 
     private boolean sameDestination(String left, String right) {
