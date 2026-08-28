@@ -81,7 +81,7 @@ public interface OrderRepository
         WHERE status = 'QUEUED'
           AND station_id = :stationId
           AND vehicle = :vehicle
-        ORDER BY order_id ASC
+        ORDER BY dropped_off_at ASC, order_id ASC
         LIMIT 1
         FOR UPDATE
         """)
