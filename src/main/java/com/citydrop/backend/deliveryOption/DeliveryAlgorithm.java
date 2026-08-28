@@ -38,6 +38,13 @@ public class DeliveryAlgorithm {
     private static final double DRONE_BASE_PRICE = 5.0;
     private static final double DRONE_PRICE_PER_LB = 1.0;
 
+    // Demand-based surge: price scales up as a station's idle fleet (StationEntity.robotCount/
+    // droneCount, live-updated by OrderQueueService as vehicles are claimed/released) runs low
+    // relative to its seeded size (see data.sql). Full fleet idle -> no markup; fleet at 0 -> max markup.
+    private static final int ROBOT_CAPACITY = 25;
+    private static final int DRONE_CAPACITY = 8;
+    private static final double MAX_MARKUP_RATE = 0.5;
+
     private static final double EARTH_RADIUS_MILES = 3958.8;
 
     private final GeoApiContext geoApiContext;
@@ -97,14 +104,24 @@ public class DeliveryAlgorithm {
     }
 
     /**
-     * Compute the cost based on package weight and the vehicle type, in USD.
+     * Compute the cost based on package weight, the station's current idle fleet, and the vehicle
+     * type, in USD. Applies a demand-based surge of up to MAX_MARKUP_RATE as the station's idle
+     * count for that vehicle drops toward zero.
      */
-    public double computeCost(double packageWeightLbs, String vehicle) {
-        double cost = switch (VehicleType.valueOf(vehicle)) {
+    public double computeCost(double packageWeightLbs, StationEntity station, String vehicle) {
+        VehicleType vehicleType = VehicleType.valueOf(vehicle);
+        double baseCost = switch (vehicleType) {
             case ROBOT -> ROBOT_BASE_PRICE + ROBOT_PRICE_PER_LB * packageWeightLbs;
             case DRONE -> DRONE_BASE_PRICE + DRONE_PRICE_PER_LB * packageWeightLbs;
         };
-        return Math.round(cost * 100.0) / 100.0;
+
+        int available = vehicleType == VehicleType.ROBOT ? station.robotCount() : station.droneCount();
+        int capacity = vehicleType == VehicleType.ROBOT ? ROBOT_CAPACITY : DRONE_CAPACITY;
+        double scarcity = Math.max(0.0, Math.min(1.0, 1.0 - ((double) available / capacity)));
+        double markupRate = MAX_MARKUP_RATE * scarcity;
+
+        double finalCost = baseCost * (1.0 + markupRate);
+        return Math.round(finalCost * 100.0) / 100.0;
     }
 
     /**

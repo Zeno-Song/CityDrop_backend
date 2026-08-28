@@ -66,7 +66,7 @@ class DeliveryServiceQuoteSnapshotTest {
                 .thenReturn(1.0);
         when(deliveryAlgorithm.computeTime(eq(station), eq(37.78), eq(-122.42), anyString()))
                 .thenReturn(18.0);
-        when(deliveryAlgorithm.computeCost(eq(4.0), anyString())).thenReturn(12.50);
+        when(deliveryAlgorithm.computeCost(eq(4.0), eq(station), anyString())).thenReturn(12.50);
     }
 
     @Test

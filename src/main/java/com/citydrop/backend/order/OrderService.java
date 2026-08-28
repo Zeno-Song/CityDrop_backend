@@ -46,11 +46,9 @@ public class OrderService {
                 )
                 .orElseThrow(QuoteExpiredException::new);
 
-        // Feature 2: submission always succeeds as PENDING_DROPOFF -- it's just a commitment, not
-        // a vehicle claim. queueIfUnavailable is persisted on the order and only consulted later,
-        // at drop-off, if no vehicle turns out to be idle then.
-        OrderEntity savedOrder = orderQueueService.reserveVehicleOrQueue(
-                userId, selectedQuote, order.queueIfUnavailable());
+        // Submission always succeeds as PENDING_DROPOFF -- it's just a commitment, not a vehicle
+        // claim. If no vehicle turns out to be idle at drop-off, the order queues automatically.
+        OrderEntity savedOrder = orderQueueService.reserveVehicleOrQueue(userId, selectedQuote);
 
         return toOrderObject(savedOrder);
     }
@@ -74,8 +72,7 @@ public class OrderService {
     }
 
     // A vehicle is claimed here, not at submitOrder -- see OrderQueueService.claimVehicleAtDropoff.
-    // Returns BEFORE_HALF_WAY if one was idle, QUEUED if the package arrived with none free and
-    // the order opted into queueIfUnavailable, or throws VehicleUnavailableException otherwise.
+    // Returns BEFORE_HALF_WAY if one was idle, QUEUED if the package arrived with none free.
     public String dropOff(int userId, int orderId) {
         OrderEntity order = getOrderEntity(userId, orderId); // 404 if missing
         if (!order.status().equals(OrderStatus.PENDING_DROPOFF.name())) {
@@ -136,8 +133,7 @@ public class OrderService {
                 newStatus,
                 order.createdAt(),
                 order.droppedOffAt(),
-                order.refundEligible(),
-                order.queueIfUnavailable()
+                order.refundEligible()
         );
     }
 
