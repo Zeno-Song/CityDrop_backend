@@ -95,6 +95,8 @@ public class OrderService {
             order = getOrderEntity(userId, orderId);
         }
 
+        // not infinite loop because order's progression direction is linear, meaning any status update eventually
+        // results in one of the terminal conditions
         while (true) {
             if (OrderStatus.valueOf(order.status()).isTerminal()) {
                 throw new InvalidOrderStatusException(order.status()); // 409, already delivered/cancelled

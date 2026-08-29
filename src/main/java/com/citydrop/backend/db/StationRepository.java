@@ -17,7 +17,7 @@ public interface StationRepository extends ListCrudRepository<StationEntity, Int
             WHERE station_id = :stationId
             FOR UPDATE
             """)
-    StationEntity findByStationIdForUpdate(@Param("stationId") int stationId);
+    void findByStationIdForUpdate(@Param("stationId") int stationId);
 
     @Modifying
     @Query("""
