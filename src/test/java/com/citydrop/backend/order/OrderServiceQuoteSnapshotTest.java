@@ -43,7 +43,7 @@ class OrderServiceQuoteSnapshotTest {
                 .thenReturn(Optional.empty());
 
         assertThrows(QuoteExpiredException.class, () -> orderService.submitOrder(42, submission));
-        verify(orderQueueService, never()).reserveVehicleOrQueue(anyInt(), any(), anyBoolean());
+        verify(orderQueueService, never()).reserveVehicleOrQueue(anyInt(), any());
     }
 
     @Test
@@ -55,7 +55,8 @@ class OrderServiceQuoteSnapshotTest {
                 "ROBOT",
                 12.50,
                 18.0,
-                3
+                3,
+                true
         );
         when(quoteSnapshotCache.findMatching(42, submission.destination(), 4.0, 3, "ROBOT"))
                 .thenReturn(Optional.of(lockedQuote));
@@ -63,21 +64,21 @@ class OrderServiceQuoteSnapshotTest {
         OrderEntity savedOrder = new OrderEntity(
                 99, 42, submission.destination(), submission.packageWeightLbs(),
                 12.50, 18.0, "ROBOT", 3, "PENDING_DROPOFF",
-                OffsetDateTime.now(), null
+                OffsetDateTime.now(), null, true
         );
-        when(orderQueueService.reserveVehicleOrQueue(eq(42), eq(lockedQuote), eq(submission.queueIfUnavailable())))
+        when(orderQueueService.reserveVehicleOrQueue(eq(42), eq(lockedQuote)))
                 .thenReturn(savedOrder);
 
         OrderObject result = orderService.submitOrder(42, submission);
 
         ArgumentCaptor<DeliveryQuote> quoteCaptor = ArgumentCaptor.forClass(DeliveryQuote.class);
-        verify(orderQueueService).reserveVehicleOrQueue(eq(42), quoteCaptor.capture(), eq(submission.queueIfUnavailable()));
+        verify(orderQueueService).reserveVehicleOrQueue(eq(42), quoteCaptor.capture());
         assertEquals(12.50, quoteCaptor.getValue().price());
         assertEquals(18.0, quoteCaptor.getValue().time());
         assertEquals(99, result.orderId());
     }
 
     private SubmissionObject submission() {
-        return new SubmissionObject("1 Main St, San Francisco", 4.0, 3, "ROBOT", false);
+        return new SubmissionObject("1 Main St, San Francisco", 4.0, 3, "ROBOT");
     }
 }

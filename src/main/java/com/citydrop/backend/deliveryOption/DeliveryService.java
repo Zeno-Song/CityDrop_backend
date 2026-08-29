@@ -83,7 +83,7 @@ public class DeliveryService {
                         station.stationId(), dest[0], dest[1], vehicle.name(),
                         () -> deliveryAlgorithm.computeTime(station, dest[0], dest[1], vehicle.name())
                 );
-                double price = deliveryAlgorithm.computeCost(packageWeightLbs, vehicle.name());
+                double price = deliveryAlgorithm.computeCost(packageWeightLbs, station, vehicle.name());
                 boolean available = (vehicle == VehicleType.ROBOT ? station.robotCount() : station.droneCount()) > 0;
                 quotes.add(new DeliveryQuote(
                         destinationAddress, packageWeightLbs, vehicle.name(), price, time, station.stationId(),

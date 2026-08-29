@@ -50,11 +50,10 @@ public interface OrderRepository
 
     // Feature 2 - a vehicle isn't claimed at order time anymore (see
     // OrderQueueService.claimVehicleAtDropoff); if none is idle when the
-    // package physically arrives and the order opted into queueIfUnavailable,
-    // it joins the queue right then instead of moving to BEFORE_HALF_WAY.
-    // dropped_off_at is still recorded here so it's not re-counted as
-    // eligible for the scheduler until it's actually assigned a vehicle
-    // (see assignQueuedOrderAtStation).
+    // package physically arrives, it joins the queue right then instead of
+    // moving to BEFORE_HALF_WAY. dropped_off_at is still recorded here so
+    // it's not re-counted as eligible for the scheduler until it's actually
+    // assigned a vehicle (see assignQueuedOrderAtStation).
     @Modifying
     @Query("""
     UPDATE orders
@@ -75,13 +74,14 @@ public interface OrderRepository
     """)
     List<OrderEntity> findEligibleForStatusAdvancement();
 
-    // Feature 2 - FIFO queue head, locked. Ordered by order_id (auto-increment), NOT created_at.
+    // Feature 2 - queue head, locked. Ordered by dropped_off_at (the moment the package physically
+    // arrived and joined the queue), tiebroken by order_id.
     @Query("""
         SELECT * FROM orders
         WHERE status = 'QUEUED'
           AND station_id = :stationId
           AND vehicle = :vehicle
-        ORDER BY order_id ASC
+        ORDER BY dropped_off_at ASC, order_id ASC
         LIMIT 1
         FOR UPDATE
         """)

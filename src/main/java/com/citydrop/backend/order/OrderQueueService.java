@@ -27,17 +27,15 @@ public class OrderQueueService {
     // just a commitment to show up, never a vehicle claim, so any number of people can be
     // PENDING_DROPOFF for the same station+vehicle at once. A vehicle is only ever actually
     // claimed later, at claimVehicleAtDropoff, when the package physically arrives.
-    // queueIfUnavailable is persisted on the order and consulted there, not here -- there's no
-    // scarcity to check at submission time since PENDING_DROPOFF doesn't reserve anything.
     @Transactional
-    public OrderEntity reserveVehicleOrQueue(int userId, DeliveryQuote selectedQuote, boolean queueIfUnavailable) {
-        return orderRepository.save(newOrder(userId, selectedQuote, OrderStatus.PENDING_DROPOFF, queueIfUnavailable));
+    public OrderEntity reserveVehicleOrQueue(int userId, DeliveryQuote selectedQuote) {
+        return orderRepository.save(newOrder(userId, selectedQuote, OrderStatus.PENDING_DROPOFF));
     }
 
     // Called when the package physically arrives at the station (OrderService.dropOff). This is
     // where a vehicle is actually claimed -- if none is idle right now (every PENDING_DROPOFF order
     // for this station+vehicle is just a commitment, not a reservation, so more people can show up
-    // than there are vehicles), the order either joins the queue (queueIfUnavailable) or fails.
+    // than there are vehicles), the order joins the queue instead.
     @Transactional
     public String claimVehicleAtDropoff(OrderEntity order) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
@@ -54,18 +52,11 @@ public class OrderQueueService {
             increment(order.stationId(), order.vehicle());
             throw new InvalidOrderStatusException(order.status());
         }
-        // No vehicle idle. If the order opted into queueIfUnavailable, it queues from this moment
-        // (the package is physically here now). Otherwise this is the same conflict submission
-        // would have thrown had a vehicle never been available -- the customer should only have
-        // chosen not to queue if they saw one was available, so hitting this means it was taken
-        // out from under them between then and now.
-        if (order.queueIfUnavailable()) {
-            if (orderRepository.markQueuedAtDropoff(order.orderId(), now) == 1) {
-                return OrderStatus.QUEUED.name();
-            }
-            throw new InvalidOrderStatusException(order.status());
+        // No vehicle idle -- the order queues from this moment (the package is physically here now).
+        if (orderRepository.markQueuedAtDropoff(order.orderId(), now) == 1) {
+            return OrderStatus.QUEUED.name();
         }
-        throw new VehicleUnavailableException();
+        throw new InvalidOrderStatusException(order.status());
     }
 
     // Called ONLY when a claimed vehicle is released: F5 scheduler on delivery completion, or F1 on
@@ -107,7 +98,7 @@ public class OrderQueueService {
 
     // Price/time are frozen at submit time from selectedQuote and never recomputed later.
     // orderId = 0 (@Id auto-increment, filled in after insert); droppedOffAt = null for a new order.
-    private OrderEntity newOrder(int userId, DeliveryQuote q, OrderStatus status, boolean queueIfUnavailable) {
+    private OrderEntity newOrder(int userId, DeliveryQuote q, OrderStatus status) {
         return new OrderEntity(
                 0,
                 userId,
@@ -120,8 +111,7 @@ public class OrderQueueService {
                 status.name(),
                 OffsetDateTime.now(),
                 null,
-                true,
-                queueIfUnavailable
+                true
         );
     }
 }

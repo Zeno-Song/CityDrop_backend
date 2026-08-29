@@ -1,5 +1,6 @@
 package com.citydrop.backend;
 
+import com.citydrop.backend.cache.QuoteCacheUnavailableException;
 import com.citydrop.backend.chat.ChatUnavailableException;
 import com.citydrop.backend.deliveryOption.AddressCannotBeGeocodedException;
 import com.citydrop.backend.deliveryOption.AddressOutOfRangeException;
@@ -8,7 +9,6 @@ import com.citydrop.backend.models.responses.ErrorResponse;
 import com.citydrop.backend.order.InvalidOrderStatusException;
 import com.citydrop.backend.order.OrderNotFoundException;
 import com.citydrop.backend.order.QuoteExpiredException;
-import com.citydrop.backend.order.VehicleUnavailableException;
 import com.citydrop.backend.user.UsernameTakenException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,15 +33,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(new ErrorResponse(ex.getMessage()));
     }
 
-
-    @ExceptionHandler(VehicleUnavailableException.class)
-    public ResponseEntity<ErrorResponse> handleVehicleUnavailableException(VehicleUnavailableException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(ex.getMessage()));
-    }
-
     @ExceptionHandler(QuoteExpiredException.class)
     public ResponseEntity<ErrorResponse> handleQuoteExpiredException(QuoteExpiredException ex) {
         return ResponseEntity.status(HttpStatus.GONE).body(new ErrorResponse(ex.getMessage()));
+    }
+
+    @ExceptionHandler(QuoteCacheUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleQuoteCacheUnavailableException(QuoteCacheUnavailableException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse("Quote service is temporarily unavailable."));
     }
 
     @ExceptionHandler(OrderNotFoundException.class)

@@ -1,5 +1,6 @@
 package com.citydrop.backend.db;
 
+import com.citydrop.backend.db.entities.OrderEntity;
 import com.citydrop.backend.db.entities.StationEntity;
 import org.springframework.data.jdbc.repository.query.Modifying;
 import org.springframework.data.jdbc.repository.query.Query;
