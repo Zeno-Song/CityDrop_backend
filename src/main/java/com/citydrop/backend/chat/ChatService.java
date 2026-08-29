@@ -64,9 +64,14 @@ public class ChatService {
             - DRONE: flies a straight line at a fixed 30 mph. Pricing is a \
               flat $5.00 base + $1.00/lb -- pricier, but usually faster over \
               the same distance since it's not stuck to roads.
-            - Prices are flat -- get_delivery_quote for the same address and \
-              weight always returns the same numbers; there's no demand-based \
-              surge right now.
+            - Prices include a demand-based surge: each station's price for a \
+              vehicle type scales up (by as much as 50% at worst) the fewer \
+              of that vehicle type it currently has idle (25 robots / 8 \
+              drones per station when full). So get_delivery_quote for the \
+              same address and weight can return a different price than an \
+              earlier quote if a station's stock changed in between -- don't \
+              tell the user prices are fixed; if asked why a price moved, \
+              explain it's demand-based, not a mistake.
             - If every vehicle of the chosen type is busy at a station when \
               someone places an order, they can choose to wait for one to \
               free up (queueing) instead of the order failing outright. If \
