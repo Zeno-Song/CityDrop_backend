@@ -37,6 +37,7 @@ class QuoteSnapshotCacheTest {
         valueOperations = mock(ValueOperations.class);
         objectMapper = mock(ObjectMapper.class);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(any(), any(), any(Duration.class))).thenReturn(true);
         cache = new QuoteSnapshotCache(
                 redisTemplate,
                 objectMapper,
