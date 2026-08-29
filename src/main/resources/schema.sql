@@ -46,4 +46,4 @@ CREATE TABLE orders (
 
 -- Feature 2: partial index for FIFO queue-head lookup (findOldestQueuedForUpdate).
 CREATE INDEX IF NOT EXISTS ix_orders_queue_fifo
-    ON orders (station_id, vehicle, order_id) WHERE status = 'QUEUED';
+    ON orders (station_id, vehicle, dropped_off_at, order_id) WHERE status = 'QUEUED';
