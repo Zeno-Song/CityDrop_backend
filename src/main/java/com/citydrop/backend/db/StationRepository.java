@@ -1,5 +1,6 @@
 package com.citydrop.backend.db;
 
+import com.citydrop.backend.db.entities.OrderEntity;
 import com.citydrop.backend.db.entities.StationEntity;
 import org.springframework.data.jdbc.repository.query.Modifying;
 import org.springframework.data.jdbc.repository.query.Query;
@@ -17,7 +18,7 @@ public interface StationRepository extends ListCrudRepository<StationEntity, Int
             WHERE station_id = :stationId
             FOR UPDATE
             """)
-    void findByStationIdForUpdate(@Param("stationId") int stationId);
+    StationEntity findByStationIdForUpdate(@Param("stationId") int stationId);
 
     @Modifying
     @Query("""
