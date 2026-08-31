@@ -73,6 +73,12 @@ class OpenAiClient {
         if (tools != null && !tools.isEmpty()) {
             body.put("tools", tools);
         }
+        // Route requests sharing our static prefix (system prompt + tool
+        // definitions) to the same prompt cache, so low traffic doesn't
+        // scatter them across backends and lose the cache hit. Bump the
+        // version suffix whenever SYSTEM_PROMPT or TOOLS changes so a new
+        // prefix doesn't keep targeting the old cache.
+        body.put("prompt_cache_key", "citydrop-chat-v1");
 
         try {
             String requestJson = objectMapper.writeValueAsString(body);
@@ -88,7 +94,17 @@ class OpenAiClient {
                 log.warn("OpenAI request failed with status {}: {}", response.statusCode(), response.body());
                 throw new ChatUnavailableException("Chat service is temporarily unavailable.");
             }
-            return objectMapper.readTree(response.body());
+            JsonNode json = objectMapper.readTree(response.body());
+            // OpenAI caches an identical prompt prefix (our static system
+            // prompt + tool definitions) automatically once it's >= 1024
+            // tokens, billing the hit at a discount. `cached_tokens` lets us
+            // confirm it's actually landing rather than assume it.
+            JsonNode usage = json.path("usage");
+            log.info("OpenAI completion: prompt_tokens={}, cached_tokens={}, completion_tokens={}",
+                    usage.path("prompt_tokens").asInt(0),
+                    usage.path("prompt_tokens_details").path("cached_tokens").asInt(0),
+                    usage.path("completion_tokens").asInt(0));
+            return json;
         } catch (IOException e) {
             log.warn("OpenAI request failed", e);
             throw new ChatUnavailableException("Chat service is temporarily unavailable.");

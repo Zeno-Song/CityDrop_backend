@@ -2,6 +2,7 @@ package com.citydrop.backend.chat;
 
 import com.citydrop.backend.deliveryOption.AddressCannotBeGeocodedException;
 import com.citydrop.backend.deliveryOption.DeliveryService;
+import com.citydrop.backend.models.requests.ChatMessage;
 import com.citydrop.backend.models.responses.DeliveryQuote;
 import com.citydrop.backend.models.responses.OrderListResponse;
 import com.citydrop.backend.models.responses.OrderObject;
@@ -109,6 +110,38 @@ class ChatServiceTest {
         Map<String, Object> toolMessage = secondRoundMessages.get(secondRoundMessages.size() - 1);
         assertEquals("tool", toolMessage.get("role"));
         assertEquals("call_xyz", toolMessage.get("tool_call_id"));
+    }
+
+    // The frontend replays the whole visible conversation every request. Only
+    // the most recent turns should reach the model, and only real user/
+    // assistant turns -- the greeting and local "error" bubbles the frontend
+    // also keeps in its list would be rejected by OpenAI as invalid roles.
+    @Test
+    @SuppressWarnings("unchecked")
+    void replyTrimsHistoryAndDropsNonConversationalRoles() {
+        when(openAiClient.createCompletion(any(), any())).thenReturn(completionWithText("ok"));
+
+        java.util.List<ChatMessage> history = new java.util.ArrayList<>();
+        for (int i = 0; i < 30; i++) {
+            history.add(new ChatMessage(i % 2 == 0 ? "user" : "assistant", "old turn " + i));
+        }
+        history.add(new ChatMessage("error", "network blip -- please try again"));
+
+        ChatService chatService = new ChatService(openAiClient, orderService, deliveryService, objectMapper);
+        chatService.reply(7, "latest question", history);
+
+        ArgumentCaptor<List<Map<String, Object>>> messagesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(openAiClient).createCompletion(messagesCaptor.capture(), any());
+        List<Map<String, Object>> sent = messagesCaptor.getValue();
+
+        assertEquals("system", sent.get(0).get("role"));
+        assertEquals("user", sent.get(sent.size() - 1).get("role"));
+        assertEquals("latest question", sent.get(sent.size() - 1).get("content"));
+        assertFalse(sent.stream().anyMatch(m -> "error".equals(m.get("role"))));
+        // system + at most 20 trimmed history turns + the current user message
+        assertTrue(sent.size() <= 22, "forwarded " + sent.size() + " messages, expected <= 22");
+        assertFalse(sent.stream().anyMatch(m -> "old turn 0".equals(m.get("content"))),
+                "oldest turns should have been trimmed");
     }
 
     @Test
