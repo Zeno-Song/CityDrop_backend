@@ -49,6 +49,13 @@ public class ChatService {
 
     private static final int MAX_TOOL_ROUNDS = 4;
 
+    // The frontend replays the whole visible conversation as `history` on
+    // every request (the backend keeps no session of its own). Cap how much
+    // of it we forward to the model: CityDrop support exchanges are short, so
+    // the last 20 turns is plenty of context, and it keeps the prompt (and
+    // its token cost) from growing without bound on a long-lived chat.
+    private static final int MAX_HISTORY_MESSAGES = 20;
+
     private static final String SYSTEM_PROMPT = """
             You are CityDrop's customer support assistant. CityDrop delivers \
             packages by robot or drone from local stations.
@@ -330,10 +337,14 @@ public class ChatService {
     public ChatOutcome reply(int userId, String userMessage, List<ChatMessage> history) {
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(message("system", SYSTEM_PROMPT));
-        if (history != null) {
-            for (ChatMessage turn : history) {
-                messages.add(message(turn.role(), turn.content()));
+        for (ChatMessage turn : trimHistory(history)) {
+            // The frontend's message list also holds a greeting and local-only
+            // "error" bubbles; OpenAI only accepts user/assistant/tool roles,
+            // so forward just the real conversational turns.
+            if (!"user".equals(turn.role()) && !"assistant".equals(turn.role())) {
+                continue;
             }
+            messages.add(message(turn.role(), turn.content()));
         }
         messages.add(message("user", userMessage));
 
@@ -401,6 +412,18 @@ public class ChatService {
         }
 
         throw new ChatUnavailableException("Chat couldn't finish responding -- please try again.");
+    }
+
+    // Keep only the most recent MAX_HISTORY_MESSAGES turns. Role filtering
+    // (and appending the current user message) is the caller's job.
+    private static List<ChatMessage> trimHistory(List<ChatMessage> history) {
+        if (history == null) {
+            return List.of();
+        }
+        if (history.size() <= MAX_HISTORY_MESSAGES) {
+            return history;
+        }
+        return history.subList(history.size() - MAX_HISTORY_MESSAGES, history.size());
     }
 
     private Map<String, Object> runTool(int userId, JsonNode toolCall) {
